@@ -2,31 +2,63 @@
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
   "appId": "com.drawdown.app",
   "productName": "Draw Down",
+  "copyright": "Copyright © Draw Down",
   "asar": true,
   "directories": {
-    "output": "release/${version}"
+    "output": "release/${version}",
+    "buildResources": "build"
   },
   "files": [
     "dist-electron",
     "dist"
   ],
+  "extraMetadata": {
+    "name": "draw-down",
+    "main": "dist-electron/main/index.js"
+  },
   "mac": {
-    "artifactName": "${productName}_${version}.${ext}",
-    "target": ["dmg", "zip"]
+    "artifactName": "${productName}-${version}-mac.${ext}",
+    "target": ["dmg", "zip"],
+    "category": "public.app-category.entertainment"
   },
   "win": {
+    "artifactName": "${productName}-${version}-win-${arch}.${ext}",
     "target": [
       {
         "target": "nsis",
         "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      },
+      {
+        "target": "zip",
+        "arch": ["x64"]
       }
-    ],
-    "artifactName": "${productName}_${version}.${ext}"
+    ]
   },
   "nsis": {
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
-    "deleteAppDataOnUninstall": false
-  }
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Draw Down",
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "installerHeaderIcon": "build/icon.ico"
+  },
+  "portable": {
+    "artifactName": "${productName}-${version}-win-portable.${ext}"
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "OWNER",
+      "repo": "draw-down",
+      "releaseType": "release"
+    }
+  ]
 }

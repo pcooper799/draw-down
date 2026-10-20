@@ -9,9 +9,14 @@
   "scripts": {
     "dev": "vite",
     "electron:dev": "vite",
-    "build": "tsc --noEmit && vite build && electron-builder",
-    "preview": "vite preview --port 43127 --host 127.0.0.1",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:vite": "tsc --noEmit && vite build",
+    "dist": "npm run dist:win",
+    "dist:win": "npm run build:vite && electron-builder --win nsis portable zip --x64",
+    "dist:win:portable": "npm run build:vite && electron-builder --win portable zip --x64",
+    "dist:dir": "npm run build:vite && electron-builder --win --x64 --dir",
+    "release:repo": "node scripts/set-release-repo.mjs",
+    "preview": "vite preview --port 43127 --host 127.0.0.1"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

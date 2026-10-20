@@ -105,7 +105,7 @@ export function InsuranceManager({ session, locked }: Props) {
               setRangeInsured(from, to, true)
             }}
           >
-            Insure
+            Insure range
           </Button>
           <Button
             type="button"
@@ -119,7 +119,7 @@ export function InsuranceManager({ session, locked }: Props) {
               setRangeInsured(from, to, false)
             }}
           >
-            Clear
+            Clear range
           </Button>
         </div>
       </div>
