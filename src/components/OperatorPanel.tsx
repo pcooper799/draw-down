@@ -97,8 +97,12 @@ export function OperatorPanel({ session }: Props) {
                     onChange={(e) => setTotalDraft(e.target.value)}
                     onBlur={() => {
                       const n = Number.parseInt(totalDraft, 10)
-                      if (Number.isFinite(n)) commitTotalTickets(n)
-                      setTotalDraft(String(session.config.totalTickets))
+                      if (Number.isFinite(n) && n >= 1) {
+                        commitTotalTickets(n)
+                        setTotalDraft(String(Math.max(n, config.stopAt)))
+                      } else {
+                        setTotalDraft(String(config.totalTickets))
+                      }
                     }}
                   />
                 </div>
