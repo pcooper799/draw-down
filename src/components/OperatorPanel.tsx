@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ImagePlus, Pause, Play, RotateCcw, Settings2 } from 'lucide-react'
 import { InsuranceManager } from '@/components/InsuranceManager'
 import { Button } from '@/components/ui/button'
@@ -36,11 +36,55 @@ export function OperatorPanel({ session }: Props) {
 
   const locked = status === 'running'
   const fileRef = useRef<HTMLInputElement>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [totalDraft, setTotalDraft] = useState(String(config.totalTickets))
   const [stopDraft, setStopDraft] = useState(String(config.stopAt))
   const [orgDraft, setOrgDraft] = useState(config.orgName)
+  const [paceDraft, setPaceDraft] = useState((config.paceMs / 1000).toFixed(1))
 
   const paceSeconds = config.paceMs / 1000
+
+  useEffect(() => {
+    if (!settingsOpen) {
+      setTotalDraft(String(config.totalTickets))
+      setStopDraft(String(config.stopAt))
+      setOrgDraft(config.orgName)
+    }
+  }, [config.totalTickets, config.stopAt, config.orgName, settingsOpen])
+
+  useEffect(() => {
+    setPaceDraft((config.paceMs / 1000).toFixed(config.paceMs % 1000 === 0 ? 0 : 1))
+  }, [config.paceMs])
+
+  const commitSettingsDrafts = () => {
+    const orgName = orgDraft.trim() || 'Your Organization'
+    const stopParsed = Number.parseInt(stopDraft, 10)
+    const stopAt = Number.isFinite(stopParsed) ? Math.max(1, stopParsed) : 1
+    const totalParsed = Number.parseInt(totalDraft, 10)
+    const total = Number.isFinite(totalParsed) && totalParsed >= 1 ? totalParsed : config.totalTickets
+
+    applyConfig({ orgName, stopAt })
+    setStopDraft(String(stopAt))
+    setOrgDraft(orgName)
+
+    if (total !== config.totalTickets) {
+      commitTotalTickets(total)
+      setTotalDraft(String(Math.max(total, stopAt)))
+    } else {
+      setTotalDraft(String(config.totalTickets))
+    }
+  }
+
+  const commitPaceSeconds = (raw: string) => {
+    const seconds = Number.parseFloat(raw)
+    if (!Number.isFinite(seconds)) {
+      setPaceDraft((config.paceMs / 1000).toFixed(1))
+      return
+    }
+    const ms = Math.round(Math.min(60, Math.max(0.2, seconds)) * 1000)
+    applyConfig({ paceMs: ms })
+    setPaceDraft((ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1))
+  }
 
   const onBrandFile = (file: File | null) => {
     if (!file) return
@@ -63,10 +107,23 @@ export function OperatorPanel({ session }: Props) {
           </p>
           <p className="font-display text-lg tracking-wide text-[var(--ink)]">Controls</p>
         </div>
-        <Dialog>
+        <Dialog
+          open={settingsOpen}
+          onOpenChange={(open) => {
+            if (!open && settingsOpen) commitSettingsDrafts()
+            setSettingsOpen(open)
+          }}
+        >
           <DialogTrigger asChild>
-            <Button type="button" variant="ghost" size="icon" aria-label="Session settings">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              aria-label="Session settings"
+            >
               <Settings2 />
+              Setup
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -74,6 +131,7 @@ export function OperatorPanel({ session }: Props) {
               <DialogTitle>Session setup</DialogTitle>
               <DialogDescription>
                 Configure the pool before you go live. Changing ticket count resets the draw.
+                Values save when you close this dialog.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-2">
@@ -83,7 +141,6 @@ export function OperatorPanel({ session }: Props) {
                   id="org-name"
                   value={orgDraft}
                   onChange={(e) => setOrgDraft(e.target.value)}
-                  onBlur={() => applyConfig({ orgName: orgDraft.trim() || 'Your Organization' })}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -95,15 +152,6 @@ export function OperatorPanel({ session }: Props) {
                     value={totalDraft}
                     disabled={locked}
                     onChange={(e) => setTotalDraft(e.target.value)}
-                    onBlur={() => {
-                      const n = Number.parseInt(totalDraft, 10)
-                      if (Number.isFinite(n) && n >= 1) {
-                        commitTotalTickets(n)
-                        setTotalDraft(String(Math.max(n, config.stopAt)))
-                      } else {
-                        setTotalDraft(String(config.totalTickets))
-                      }
-                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -114,12 +162,6 @@ export function OperatorPanel({ session }: Props) {
                     value={stopDraft}
                     disabled={locked}
                     onChange={(e) => setStopDraft(e.target.value)}
-                    onBlur={() => {
-                      const n = Number.parseInt(stopDraft, 10)
-                      const stopAt = Number.isFinite(n) ? Math.max(1, n) : 1
-                      applyConfig({ stopAt })
-                      setStopDraft(String(stopAt))
-                    }}
                   />
                 </div>
               </div>
@@ -148,6 +190,16 @@ export function OperatorPanel({ session }: Props) {
                   )}
                 </div>
               </div>
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => {
+                  commitSettingsDrafts()
+                  setSettingsOpen(false)
+                }}
+              >
+                Save & close
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -156,10 +208,24 @@ export function OperatorPanel({ session }: Props) {
       <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4">
         <div className="space-y-3">
           <div className="flex items-end justify-between gap-3">
-            <Label>Draw pace</Label>
-            <span className="font-mono text-sm text-[var(--accent)]">
-              {paceSeconds.toFixed(paceSeconds < 10 ? 1 : 0)}s
-            </span>
+            <Label htmlFor="pace-seconds">Draw pace</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="pace-seconds"
+                className="h-8 w-20 text-right font-mono"
+                inputMode="decimal"
+                value={paceDraft}
+                onChange={(e) => setPaceDraft(e.target.value)}
+                onBlur={() => commitPaceSeconds(paceDraft)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur()
+                  }
+                }}
+                aria-label="Draw pace in seconds"
+              />
+              <span className="text-sm text-[var(--ink-muted)]">s</span>
+            </div>
           </div>
           <Slider
             value={[config.paceMs]}
@@ -169,7 +235,7 @@ export function OperatorPanel({ session }: Props) {
             onValueChange={(v) => applyConfig({ paceMs: v[0] ?? 2500 })}
           />
           <p className="text-xs text-[var(--ink-faint)]">
-            Time between draws. Editable live while drawing.
+            Time between draws ({paceSeconds.toFixed(paceSeconds < 10 ? 1 : 0)}s). Editable live while drawing.
           </p>
         </div>
 
@@ -191,7 +257,7 @@ export function OperatorPanel({ session }: Props) {
               {status === 'paused' ? 'Resume' : 'Start'}
             </Button>
           )}
-          <Button type="button" variant="outline" size="lg" onClick={resetSession} disabled={locked}>
+          <Button type="button" variant="outline" size="lg" onClick={resetSession} disabled={locked} aria-label="Reset draw">
             <RotateCcw />
           </Button>
         </div>
