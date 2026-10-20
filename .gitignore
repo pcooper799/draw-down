@@ -1,0 +1,16 @@
+logs
+*.log
+npm-debug.log*
+node_modules
+dist
+dist-ssr
+dist-electron
+dist-types
+release
+*.local
+.DS_Store
+.idea
+.vscode/.debug.env
+/test-results/
+/playwright-report/
+/playwright/.cache/
