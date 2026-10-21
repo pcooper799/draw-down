@@ -414,6 +414,7 @@ export function useDrawSession() {
         previousEventId?: string
         resetBy?: string
         resetReason?: string
+        irreversibleConfirmed?: boolean
       },
     ) => {
       clearTimer()
@@ -451,6 +452,7 @@ export function useDrawSession() {
                 previousEventId: meta.previousEventId,
                 resetBy: meta.resetBy,
                 resetReason: meta.resetReason,
+                irreversibleConfirmed: meta.irreversibleConfirmed === true,
               }
             : {}),
         },
@@ -603,7 +605,7 @@ export function useDrawSession() {
    * current audit log, then opens a brand-new audit event for the next game.
    */
   const resetSession = useCallback(
-    (auth?: { operatorName: string; reason: string }) => {
+    (auth?: { operatorName: string; reason: string; irreversibleConfirmed?: boolean }) => {
       const started =
         statusRef.current === 'running' ||
         statusRef.current === 'paused' ||
@@ -614,8 +616,9 @@ export function useDrawSession() {
 
       const operatorName = auth?.operatorName?.trim() ?? ''
       const reason = auth?.reason?.trim() ?? ''
+      const irreversibleConfirmed = auth?.irreversibleConfirmed === true
 
-      if (started && (!operatorName || !reason)) {
+      if (started && (!operatorName || !reason || !irreversibleConfirmed)) {
         return false
       }
 
@@ -634,6 +637,10 @@ export function useDrawSession() {
           drawHadStarted: started,
           operatorName: operatorName || null,
           reason: reason || null,
+          irreversibleConfirmed: started ? irreversibleConfirmed : null,
+          irreversibleWarningAcknowledged: started
+            ? 'Yes — I understand this cannot be undone and I want to reset the board.'
+            : null,
           previousEventId,
           status: statusRef.current,
           eliminatedCount: eliminatedRef.current.length,
@@ -653,7 +660,12 @@ export function useDrawSession() {
         configRef.current.totalTickets,
         empty,
         started
-          ? { previousEventId, resetBy: operatorName, resetReason: reason }
+          ? {
+              previousEventId,
+              resetBy: operatorName,
+              resetReason: reason,
+              irreversibleConfirmed: true,
+            }
           : undefined,
       )
       setSaveNotice(

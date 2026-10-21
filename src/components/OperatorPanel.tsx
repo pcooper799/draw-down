@@ -686,9 +686,9 @@ export function OperatorPanel({
       <ResetConfirmDialog
         open={resetDialogOpen}
         onOpenChange={setResetDialogOpen}
-        onConfirm={({ operatorName, reason }) => {
+        onConfirm={({ operatorName, reason, irreversibleConfirmed }) => {
           discardAutosave()
-          resetSession({ operatorName, reason })
+          resetSession({ operatorName, reason, irreversibleConfirmed })
         }}
       />
     </aside>
