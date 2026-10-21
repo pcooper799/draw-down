@@ -18,7 +18,9 @@ import { LICENSE_PUBLIC_KEY_B64URL } from '@/lib/licensePublicKey'
 
 ed.hashes.sha512 = (...msgs) => sha512(ed.etc.concatBytes(...msgs))
 
-const STORAGE_KEY = 'draw-down.license.v1'
+/** Chromium/Electron localStorage key (survives app updates; wiped on Clear activation). */
+export const LICENSE_STORAGE_KEY = 'draw-down.license.v1'
+const STORAGE_KEY = LICENSE_STORAGE_KEY
 /** Legacy HMAC secret — kept so already-issued DD1 codes still activate. */
 export const LICENSE_SECRET = 'draw-down-phillip-cooper-license-2026'
 

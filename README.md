@@ -21,7 +21,9 @@ npm run electron:dev
 
 ## Paid activation (48 hours)
 
-Packaged Windows builds open on an activation screen until a valid code is entered (first use). Activation unlocks **live drawing for 48 hours**. When that window ends, the app stays open in **review mode**: organizers can read audit history, run verification, and export JSON/CSV/PDF reports without buying another code. Starting or resuming a live draw requires a new activation.
+Packaged Windows builds open on an activation screen until a valid code is entered (first use). Activation unlocks **live drawing for 48 hours**. The license is stored in this PC’s app data (`%APPDATA%\draw-down` localStorage) — updating or reinstalling does **not** remove it until those 48 hours end, or you use **Setup → Clear activation on this PC**. When that window ends, the app stays open in **review mode**: organizers can read audit history, run verification, and export reports without buying another code. Starting or resuming a live draw requires a new activation.
+
+Autosave keeps the last session (including insurance marks). A **finished** event reopens as a fresh all-yellow board. Mid-event restores keep greens; press **Reset** or **Setup → Clear saved session** for all yellow.
 
 ### Pricing (seller guidance)
 

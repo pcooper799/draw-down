@@ -134,9 +134,15 @@ export function LicenseBadge({ status }: { status: LicenseStatus }) {
     )
   }
   if (status.state !== 'active') return null
+  const until = new Date(status.expiresAt).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
   return (
-    <p className="text-[0.65rem] text-[var(--ink-faint)]">
-      License · {formatRemaining(status.remainingMs)} left
+    <p className="text-[0.65rem] text-[var(--ink-faint)]" title={`Expires ${status.expiresAt}`}>
+      License · {formatRemaining(status.remainingMs)} left · until {until}
     </p>
   )
 }

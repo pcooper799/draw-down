@@ -12,11 +12,19 @@ export type UninstallResult = {
   reason?: string
 }
 
+export type LocalDataInfo = {
+  userData: string
+  auditsDir: string
+  licenseKey: string
+  sessionKey: string
+}
+
 type BridgeHandler = (message: unknown) => void
 
 contextBridge.exposeInMainWorld('drawDown', {
   platform: process.platform as NodeJS.Platform,
   getInstallInfo: (): Promise<InstallInfo> => ipcRenderer.invoke('draw-down:get-install-info'),
+  getDataInfo: (): Promise<LocalDataInfo> => ipcRenderer.invoke('draw-down:get-data-info'),
   uninstall: (): Promise<UninstallResult> => ipcRenderer.invoke('draw-down:uninstall'),
   showOperatorWindow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('draw-down:show-operator'),
   focusStageWindow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('draw-down:focus-stage'),

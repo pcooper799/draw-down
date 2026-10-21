@@ -81,8 +81,10 @@ export function OperatorPanel({
     saveNow,
     exportSaveFile,
     loadSaveFile,
+    discardAutosave,
     lastSavedAt,
     saveNotice,
+    insuredCount,
   } = session
 
   const locked = status === 'running' || controlsLocked
@@ -99,17 +101,23 @@ export function OperatorPanel({
   const [uninstallBusy, setUninstallBusy] = useState(false)
   const [uninstallMessage, setUninstallMessage] = useState<string | null>(null)
   const [canUninstall, setCanUninstall] = useState(false)
+  const [dataInfo, setDataInfo] = useState<DrawDownLocalDataInfo | null>(null)
 
   useEffect(() => {
     let cancelled = false
     const api = window.drawDown
     if (!api?.getInstallInfo) {
       setCanUninstall(false)
-      return
+    } else {
+      void api.getInstallInfo().then((info) => {
+        if (!cancelled) setCanUninstall(Boolean(info.canUninstall))
+      })
     }
-    void api.getInstallInfo().then((info) => {
-      if (!cancelled) setCanUninstall(Boolean(info.canUninstall))
-    })
+    if (api?.getDataInfo) {
+      void api.getDataInfo().then((info) => {
+        if (!cancelled) setDataInfo(info)
+      })
+    }
     return () => {
       cancelled = true
     }
@@ -339,9 +347,34 @@ export function OperatorPanel({
                 </Button>
                 <div className="space-y-2 border-t border-[var(--line)] pt-4">
                   <p className="text-xs text-[var(--ink-faint)]">
-                    Activation is stored on this PC. Older uninstalls left that data behind — use
-                    Clear activation below, or Uninstall (new builds wipe app data).
+                    Green tickets on open usually come from the autosaved session on this PC (not
+                    the installer). Press Reset for a new all-yellow event, or clear session below.
                   </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={controlsLocked}
+                    onClick={() => {
+                      discardAutosave()
+                      resetSession()
+                      setSettingsOpen(false)
+                    }}
+                  >
+                    Clear saved session (all yellow)
+                  </Button>
+                  <p className="text-xs text-[var(--ink-faint)]">
+                    Activation lasts 48 hours from when you entered the code. Updating or reinstalling
+                    does not wipe it. Use Clear activation below, or Uninstall (new builds wipe app
+                    data).
+                  </p>
+                  {dataInfo && (
+                    <p className="break-all font-mono text-[0.65rem] text-[var(--ink-faint)]">
+                      App data: {dataInfo.userData}
+                      <br />
+                      License key: {dataInfo.licenseKey} · Session: {dataInfo.sessionKey}
+                    </p>
+                  )}
                   {onClearActivation && (
                     <Button
                       type="button"
@@ -503,11 +536,18 @@ export function OperatorPanel({
               size="lg"
               onClick={resetSession}
               disabled={drawLocked || controlsLocked}
-              aria-label="Reset draw"
+              aria-label="New event — all tickets yellow"
+              title="New event — clear board to all yellow"
             >
               <RotateCcw />
             </Button>
           </div>
+          {insuredCount > 0 && status === 'idle' && !controlsLocked && (
+            <p className="text-xs text-[var(--ink-muted)]">
+              {insuredCount} ticket{insuredCount === 1 ? '' : 's'} insured (green). Reset clears
+              them to yellow for a new event.
+            </p>
+          )}
           {controlsLocked && (
             <div className="space-y-2 border border-[var(--danger)]/40 bg-[rgba(211,90,74,0.1)] px-3 py-2 text-sm text-[var(--danger)]">
               <p>

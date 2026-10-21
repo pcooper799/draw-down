@@ -12,10 +12,18 @@ type DrawDownUninstallResult = {
   reason?: string
 }
 
+type DrawDownLocalDataInfo = {
+  userData: string
+  auditsDir: string
+  licenseKey: string
+  sessionKey: string
+}
+
 interface Window {
   drawDown?: {
     platform: NodeJS.Platform
     getInstallInfo?: () => Promise<DrawDownInstallInfo>
+    getDataInfo?: () => Promise<DrawDownLocalDataInfo>
     uninstall?: () => Promise<DrawDownUninstallResult>
     showOperatorWindow?: () => Promise<{ ok: boolean }>
     focusStageWindow?: () => Promise<{ ok: boolean }>

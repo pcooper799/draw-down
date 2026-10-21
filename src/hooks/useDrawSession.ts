@@ -96,10 +96,64 @@ async function persistAudit(engine: AuditEngine) {
   await flushAuditDurable(blob)
 }
 
+/** Finished events should not reopen with leftover greens — start a clean yellow pool. */
+function freshYellowFromConfig(config: SessionConfig, notice: string) {
+  const empty = new Set<number>()
+  const audit = createAudit(config)
+  const snapshot = toSnapshot({
+    config,
+    insuranceMarks: empty,
+    eliminated: [],
+    heldOut: [],
+    history: [],
+    lastDrawn: null,
+    status: 'idle',
+    eventId: audit.eventId,
+  })
+  writeAutosave(snapshot)
+  return {
+    config,
+    insuranceMarks: empty,
+    pool: buildPool(config.totalTickets, empty),
+    eliminated: [] as number[],
+    heldOut: [] as number[],
+    history: [] as DrawEvent[],
+    lastDrawn: null as DrawEvent | null,
+    status: 'idle' as DrawStatus,
+    audit,
+    restoredAt: null as string | null,
+    bootNotice: notice,
+  }
+}
+
 export function useDrawSession() {
   const initial = useMemo(() => {
     const saved = typeof window !== 'undefined' ? readAutosave() : null
-    if (saved) return { ...hydrateFromSnapshot(saved), restoredAt: saved.savedAt }
+    if (saved?.status === 'finished') {
+      return freshYellowFromConfig(
+        saved.config,
+        'Previous event was finished — started fresh (all tickets yellow)',
+      )
+    }
+    if (saved) {
+      const hydrated = hydrateFromSnapshot(saved)
+      const insured = hydrated.insuranceMarks.size
+      const midDraw =
+        hydrated.eliminated.length > 0 ||
+        hydrated.history.length > 0 ||
+        hydrated.status === 'paused'
+      return {
+        ...hydrated,
+        restoredAt: saved.savedAt,
+        bootNotice: midDraw
+          ? insured > 0
+            ? `Restored mid-event · ${insured} insured (green). Reset for a new all-yellow event.`
+            : 'Restored previous mid-event session'
+          : insured > 0
+            ? `Restored setup · ${insured} insured (green). Reset or Clear all insurance for all yellow.`
+            : 'Restored previous session',
+      }
+    }
     const config = DEFAULT_CONFIG
     const audit = createAudit(config)
     return {
@@ -113,6 +167,7 @@ export function useDrawSession() {
       status: 'idle' as DrawStatus,
       audit,
       restoredAt: null as string | null,
+      bootNotice: null as string | null,
     }
   }, [])
 
@@ -126,9 +181,7 @@ export function useDrawSession() {
   const [lastDrawn, setLastDrawn] = useState<DrawEvent | null>(initial.lastDrawn)
   const [flashKey, setFlashKey] = useState(0)
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(initial.restoredAt)
-  const [saveNotice, setSaveNotice] = useState<string | null>(
-    initial.restoredAt ? 'Restored previous session' : null,
-  )
+  const [saveNotice, setSaveNotice] = useState<string | null>(initial.bootNotice)
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(() => [...initial.audit.entries])
   const [seedCommitment, setSeedCommitment] = useState<string | null>(
     () => initial.audit.seed.commitment || null,

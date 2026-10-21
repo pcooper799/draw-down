@@ -273,6 +273,12 @@ async function ensureAuditsDir() {
 }
 
 ipcMain.handle('draw-down:get-install-info', () => getInstallInfo())
+ipcMain.handle('draw-down:get-data-info', () => ({
+  userData: app.getPath('userData'),
+  auditsDir: auditsDir(),
+  licenseKey: 'draw-down.license.v1',
+  sessionKey: 'draw-down.session.v1',
+}))
 ipcMain.handle('draw-down:uninstall', () => launchUninstaller())
 ipcMain.handle('draw-down:show-operator', async () => {
   await createOperatorWindow()
