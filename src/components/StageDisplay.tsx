@@ -38,27 +38,43 @@ export function StageDisplay({
     <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="absolute inset-0">
         {brandImageDataUrl ? (
-          <img
-            src={brandImageDataUrl}
-            alt=""
-            className="h-full w-full object-cover opacity-35 stage-brand-drift"
-          />
+          <>
+            <img
+              src={brandImageDataUrl}
+              alt=""
+              className="h-full w-full object-cover opacity-[0.22] stage-brand-drift"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,12,10,0.45)_0%,rgba(8,12,10,0.82)_55%,rgba(8,12,10,0.94)_100%)]" />
+          </>
         ) : (
-          <div className="h-full w-full stage-fallback-grid" aria-hidden />
+          <>
+            <div className="h-full w-full stage-fallback-grid" aria-hidden />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,12,10,0.35)_0%,rgba(8,12,10,0.85)_100%)]" />
+          </>
         )}
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,12,10,0.62)_0%,rgba(8,12,10,0.88)_40%,rgba(8,12,10,0.96)_100%)]" />
         <div className="absolute inset-0 stage-vignette" />
       </div>
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pb-4 pt-4 sm:px-8 sm:pt-6">
         <header className="flex shrink-0 items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="font-display text-[clamp(2rem,4.5vw,3.4rem)] leading-none tracking-[0.03em] text-[var(--ink)] stage-brand-in">
-              {orgName}
-            </p>
-            <p className="mt-2 text-sm tracking-wide text-[var(--ink-muted)]">
-              Ticket draw-down · live on stage
-            </p>
+          <div className="flex min-w-0 items-center gap-4 sm:gap-5">
+            {brandImageDataUrl ? (
+              <div className="brand-mark shrink-0">
+                <img
+                  src={brandImageDataUrl}
+                  alt={`${orgName} logo`}
+                  className="brand-mark-img"
+                />
+              </div>
+            ) : null}
+            <div className="min-w-0">
+              <p className="font-display text-[clamp(2rem,4.5vw,3.4rem)] leading-none tracking-[0.03em] text-[var(--ink)] stage-brand-in">
+                {orgName}
+              </p>
+              <p className="mt-2 text-sm tracking-wide text-[var(--ink-muted)]">
+                Ticket draw-down · live on stage
+              </p>
+            </div>
           </div>
           <div className="status-pill shrink-0 px-3 py-2 text-right">
             <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-[var(--ink-faint)]">

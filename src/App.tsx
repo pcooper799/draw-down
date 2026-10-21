@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { PanelRightOpen } from 'lucide-react'
+import { FinishCelebration, useFinishCelebration } from '@/components/FinishCelebration'
 import { OperatorPanel } from '@/components/OperatorPanel'
 import { StageDisplay } from '@/components/StageDisplay'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ export default function App() {
   const session = useDrawSession()
   const [projectionMode, setProjectionMode] = useState(false)
   const { status, start, pause, remaining, config, saveNow } = session
+  const finish = useFinishCelebration(status)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -108,6 +110,16 @@ export default function App() {
           </Button>
         </div>
       )}
+
+      <FinishCelebration
+        open={finish.open}
+        onOpenChange={finish.setOpen}
+        orgName={session.config.orgName}
+        brandImageDataUrl={session.config.brandImageDataUrl}
+        pool={session.pool}
+        lastDrawn={session.lastDrawn}
+        digits={session.digits}
+      />
     </div>
   )
 }
