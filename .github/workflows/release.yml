@@ -35,10 +35,12 @@ jobs:
         with:
           draft: false
           generate_release_notes: true
+          # Only ship packaged installers — not win-unpacked helpers (elevate.exe, raw .exe).
           files: |
-            release/**/*.exe
-            release/**/*.zip
-            release/**/*.yml
-            release/**/*.blockmap
+            release/*/*-win-x64.exe
+            release/*/*-win-portable.exe
+            release/*/*-win-x64.zip
+            release/*/*-win-x64.exe.blockmap
+            release/*/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
