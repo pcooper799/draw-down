@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Download Draw Down</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Figtree:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --stage: #0b1210;
+        --ink: #f3e6c8;
+        --muted: #b7aa8f;
+        --accent: #e8a838;
+        --accent-fg: #1a1206;
+        --line: rgba(243, 230, 200, 0.14);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Figtree, system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 20% 10%, rgba(90, 168, 122, 0.16), transparent 40%),
+          radial-gradient(circle at 80% 80%, rgba(232, 168, 56, 0.14), transparent 36%),
+          var(--stage);
+      }
+      main {
+        width: min(720px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 4.5rem 0 3rem;
+      }
+      h1 {
+        font-family: "Archivo Black", Impact, sans-serif;
+        font-size: clamp(2.8rem, 8vw, 4.5rem);
+        letter-spacing: 0.04em;
+        margin: 0 0 0.75rem;
+      }
+      p { color: var(--muted); line-height: 1.55; }
+      .card {
+        margin-top: 2rem;
+        border: 1px solid var(--line);
+        background: rgba(16, 24, 22, 0.85);
+        padding: 1.5rem;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        min-height: 3rem;
+        padding: 0.75rem 1.25rem;
+        border: 0;
+        background: var(--accent);
+        color: var(--accent-fg);
+        font-weight: 700;
+        text-decoration: none;
+      }
+      .btn[aria-disabled="true"] {
+        opacity: 0.55;
+        pointer-events: none;
+      }
+      .btn.secondary {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--line);
+        margin-left: 0.5rem;
+      }
+      code {
+        font-size: 0.9em;
+        color: var(--accent);
+      }
+      .meta { margin-top: 0.75rem; font-size: 0.9rem; }
+      .steps { margin: 1rem 0 0; padding-left: 1.2rem; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>DRAW DOWN</h1>
+      <p>
+        Windows event software for staged ticket draw-downs. Download the installer,
+        run it on a PC, and go live — no account required.
+      </p>
+
+      <div class="card">
+        <strong>Windows (x64)</strong>
+        <p class="meta" id="status">Looking up the latest public release…</p>
+        <div>
+          <a class="btn" id="nsis" href="#" aria-disabled="true">Download installer (.exe)</a>
+          <a class="btn secondary" id="portable" href="#" aria-disabled="true">Portable .exe</a>
+        </div>
+        <p class="meta" id="fallback" hidden>
+          No public GitHub release is configured yet. After you publish a release, set
+          <code>window.DRAW_DOWN_REPO</code> in this page (or edit the defaults below) to
+          <code>owner/repo</code>, then share this page URL.
+        </p>
+      </div>
+
+      <div class="card">
+        <strong>Share this page</strong>
+        <p>
+          Host <code>website/</code> on GitHub Pages (or any static host) and send attendees
+          that URL. The buttons resolve to the latest GitHub Release assets automatically.
+        </p>
+        <ol class="steps">
+          <li>Push this repo to GitHub and set <code>publish.owner/repo</code> in <code>electron-builder.json</code>.</li>
+          <li>Tag a version (<code>git tag v0.1.0 && git push --tags</code>) or run the Release workflow.</li>
+          <li>Enable GitHub Pages for the <code>website/</code> folder (or copy it to <code>docs/</code>).</li>
+          <li>Send people the Pages URL — e.g. <code>https://OWNER.github.io/draw-down/</code>.</li>
+        </ol>
+      </div>
+    </main>
+    <script>
+      // Override after you create a real GitHub repo, e.g. "acme/draw-down"
+      window.DRAW_DOWN_REPO = window.DRAW_DOWN_REPO || "pcooper799/draw-down";
+
+      async function loadLatest() {
+        const status = document.getElementById("status");
+        const nsis = document.getElementById("nsis");
+        const portable = document.getElementById("portable");
+        const fallback = document.getElementById("fallback");
+        const repo = window.DRAW_DOWN_REPO;
+
+        if (!repo || repo.startsWith("OWNER/")) {
+          status.textContent = "Release repo not configured yet.";
+          fallback.hidden = false;
+          return;
+        }
+
+        try {
+          const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const assets = data.assets || [];
+          const installer = assets.find((a) => /win-x64\.exe$/i.test(a.name) && !/portable/i.test(a.name))
+            || assets.find((a) => /\.exe$/i.test(a.name) && !/portable/i.test(a.name));
+          const portableAsset = assets.find((a) => /portable\.exe$/i.test(a.name));
+
+          status.textContent = `Latest: ${data.tag_name || data.name || "release"}`;
+          if (installer) {
+            nsis.href = installer.browser_download_url;
+            nsis.removeAttribute("aria-disabled");
+            nsis.textContent = `Download ${installer.name}`;
+          }
+          if (portableAsset) {
+            portable.href = portableAsset.browser_download_url;
+            portable.removeAttribute("aria-disabled");
+            portable.textContent = `Portable ${portableAsset.name}`;
+          }
+          if (!installer && !portableAsset) {
+            fallback.hidden = false;
+            status.textContent = "Release found, but no .exe assets yet.";
+          }
+        } catch (err) {
+          status.textContent = "Could not load GitHub Releases.";
+          fallback.hidden = false;
+          console.error(err);
+        }
+      }
+
+      loadLatest();
+    </script>
+  </body>
+</html>
