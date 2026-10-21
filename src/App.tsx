@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AppWindow, PanelRightOpen } from 'lucide-react'
+import { AppWindow, Minus, PanelRightOpen, Plus } from 'lucide-react'
 import { ActivationScreen, LicenseBadge } from '@/components/ActivationScreen'
 import { FinishCelebration, useFinishCelebration } from '@/components/FinishCelebration'
 import { OperatorPanel } from '@/components/OperatorPanel'
 import { StageDisplay } from '@/components/StageDisplay'
 import { Button } from '@/components/ui/button'
 import { useDrawSession, type DrawSession } from '@/hooks/useDrawSession'
-import { hasLiveEventProgress } from '@/lib/drawRules'
+import {
+  hasLiveEventProgress,
+  MAX_TICKET_SCALE,
+  MIN_TICKET_SCALE,
+  nudgeTicketScale,
+} from '@/lib/drawRules'
 import {
   canOpenInReviewMode,
   clearLicenseRecord,
@@ -221,6 +226,35 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         return
       }
 
+      // Display-only: works in review mode and projection without a live license.
+      if (
+        !operatorOnly &&
+        (event.key === 'p' || event.key === 'P') &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.repeat
+      ) {
+        event.preventDefault()
+        setProjectionMode((v) => !v)
+        return
+      }
+
+      if (
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.repeat &&
+        (event.key === '+' || event.key === '=' || event.key === '-' || event.key === '_')
+      ) {
+        event.preventDefault()
+        const dir = event.key === '+' || event.key === '=' ? 1 : -1
+        session.applyConfig({
+          ticketScale: nudgeTicketScale(session.config.ticketScale ?? 1, dir),
+        })
+        return
+      }
+
       if (!license.licensed) {
         if ((event.key === ' ' || event.code === 'Space') && !event.repeat && status === 'running') {
           event.preventDefault()
@@ -238,19 +272,6 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         event.preventDefault()
         if (operatorOnly) void focusStageWindowElectron()
         else void openOperatorWindowElectron()
-        return
-      }
-
-      if (
-        !operatorOnly &&
-        (event.key === 'p' || event.key === 'P') &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !event.repeat
-      ) {
-        event.preventDefault()
-        setProjectionMode((v) => !v)
         return
       }
 
@@ -282,6 +303,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
     config.stopAt,
     saveNow,
     license.licensed,
+    session,
   ])
 
   if (hardBlocked) {
@@ -388,6 +410,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         insuredRemaining={session.insuredRemaining}
         pool={session.pool}
         heldOut={session.heldOut}
+        ticketScale={session.config.ticketScale}
         onToggleHold={license.licensed ? session.toggleTicketHold : undefined}
       />
 
@@ -395,6 +418,43 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
 
       {projectionMode && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-end gap-2 px-3 pb-3 sm:px-4">
+          <div className="pointer-events-auto flex items-center gap-1 border border-[var(--line)] bg-black/35 opacity-50 hover:opacity-100">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-[var(--ink-muted)]"
+              disabled={(session.config.ticketScale ?? 1) <= MIN_TICKET_SCALE}
+              onClick={() =>
+                session.applyConfig({
+                  ticketScale: nudgeTicketScale(session.config.ticketScale ?? 1, -1),
+                })
+              }
+              aria-label="Decrease ticket size"
+              title="Smaller tickets (−)"
+            >
+              <Minus className="size-3.5" />
+            </Button>
+            <span className="min-w-[2.5rem] text-center font-mono text-xs text-[var(--ink-muted)]">
+              {Math.round((session.config.ticketScale ?? 1) * 100)}%
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-[var(--ink-muted)]"
+              disabled={(session.config.ticketScale ?? 1) >= MAX_TICKET_SCALE}
+              onClick={() =>
+                session.applyConfig({
+                  ticketScale: nudgeTicketScale(session.config.ticketScale ?? 1, 1),
+                })
+              }
+              aria-label="Increase ticket size"
+              title="Larger tickets (+)"
+            >
+              <Plus className="size-3.5" />
+            </Button>
+          </div>
           <Button
             type="button"
             variant="ghost"
@@ -482,6 +542,23 @@ function StageMirrorApp() {
         return
       }
 
+      if (
+        view &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.repeat &&
+        (event.key === '+' || event.key === '=' || event.key === '-' || event.key === '_')
+      ) {
+        event.preventDefault()
+        const dir = event.key === '+' || event.key === '=' ? 1 : -1
+        sendBridgeCommand({
+          type: 'applyConfig',
+          patch: { ticketScale: nudgeTicketScale(view.config.ticketScale ?? 1, dir) },
+        })
+        return
+      }
+
       if (event.key === ' ' || event.code === 'Space') {
         if (event.repeat) return
         event.preventDefault()
@@ -558,6 +635,7 @@ function StageMirrorApp() {
         insuredRemaining={view.insuredRemaining}
         pool={view.pool}
         heldOut={view.heldOut}
+        ticketScale={view.config.ticketScale}
         onToggleHold={
           licensed
             ? (ticket) => sendBridgeCommand({ type: 'toggleHold', ticket })
@@ -565,7 +643,46 @@ function StageMirrorApp() {
         }
       />
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-end px-3 pb-3 sm:px-4">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-end gap-2 px-3 pb-3 sm:px-4">
+        <div className="pointer-events-auto flex items-center gap-1 border border-[var(--line)] bg-black/35 opacity-50 hover:opacity-100">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-[var(--ink-muted)]"
+            disabled={(view.config.ticketScale ?? 1) <= MIN_TICKET_SCALE}
+            onClick={() =>
+              sendBridgeCommand({
+                type: 'applyConfig',
+                patch: { ticketScale: nudgeTicketScale(view.config.ticketScale ?? 1, -1) },
+              })
+            }
+            aria-label="Decrease ticket size"
+            title="Smaller tickets (−)"
+          >
+            <Minus className="size-3.5" />
+          </Button>
+          <span className="min-w-[2.5rem] text-center font-mono text-xs text-[var(--ink-muted)]">
+            {Math.round((view.config.ticketScale ?? 1) * 100)}%
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-[var(--ink-muted)]"
+            disabled={(view.config.ticketScale ?? 1) >= MAX_TICKET_SCALE}
+            onClick={() =>
+              sendBridgeCommand({
+                type: 'applyConfig',
+                patch: { ticketScale: nudgeTicketScale(view.config.ticketScale ?? 1, 1) },
+              })
+            }
+            aria-label="Increase ticket size"
+            title="Larger tickets (+)"
+          >
+            <Plus className="size-3.5" />
+          </Button>
+        </div>
         <Button
           type="button"
           variant="ghost"

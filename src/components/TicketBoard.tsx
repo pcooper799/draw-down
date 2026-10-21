@@ -1,4 +1,5 @@
 import { useMemo, type MouseEvent } from 'react'
+import { ticketCellRem } from '@/lib/drawRules'
 import { formatTicket } from '@/lib/utils'
 import type { Ticket } from '@/types'
 
@@ -10,6 +11,8 @@ type TicketBoardProps = {
   heldOut: number[]
   digits: number
   lastDrawnTicket: number | null
+  /** Cell size multiplier (1 = default). Persists with session. */
+  ticketScale?: number
   /** Right-click: hold an in-pool ticket out, or bring a held ticket back. */
   onToggleHold?: (ticket: number) => void
   interactive?: boolean
@@ -32,6 +35,7 @@ export function TicketBoard({
   heldOut,
   digits,
   lastDrawnTicket,
+  ticketScale = 1,
   onToggleHold,
   interactive = Boolean(onToggleHold),
 }: TicketBoardProps) {
@@ -48,8 +52,7 @@ export function TicketBoard({
     [totalTickets],
   )
 
-  // Dense but projection-readable: ~2.4–3.2rem cells; scroll when needed
-  const minCell = totalTickets > 300 ? '2.15rem' : totalTickets > 120 ? '2.4rem' : '2.75rem'
+  const minCell = ticketCellRem(totalTickets, ticketScale)
 
   const handleContextMenu = (event: MouseEvent, n: number, state: TicketBoardState) => {
     if (!onToggleHold) return

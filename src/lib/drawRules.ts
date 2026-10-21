@@ -5,6 +5,10 @@ export const MAX_TICKETS = 2500
 export const MIN_STOP_AT = 1
 export const MIN_PACE_MS = 200
 export const MAX_PACE_MS = 60_000
+/** Ticket board cell scale (1 = default density). */
+export const MIN_TICKET_SCALE = 0.7
+export const MAX_TICKET_SCALE = 2.4
+export const TICKET_SCALE_STEP = 0.1
 
 export function clampTotalTickets(total: number, stopAt = MIN_STOP_AT) {
   const safeStop = Math.max(MIN_STOP_AT, stopAt)
@@ -21,6 +25,28 @@ export function clampStopAt(stopAt: number, totalTickets: number) {
 export function clampPaceMs(paceMs: number) {
   if (!Number.isFinite(paceMs)) return 2500
   return Math.min(MAX_PACE_MS, Math.max(MIN_PACE_MS, Math.round(paceMs)))
+}
+
+export function clampTicketScale(scale: number) {
+  if (!Number.isFinite(scale)) return 1
+  const stepped = Math.round(scale / TICKET_SCALE_STEP) * TICKET_SCALE_STEP
+  return Math.min(MAX_TICKET_SCALE, Math.max(MIN_TICKET_SCALE, Number(stepped.toFixed(1))))
+}
+
+export function nudgeTicketScale(scale: number, direction: 1 | -1) {
+  return clampTicketScale(clampTicketScale(scale) + direction * TICKET_SCALE_STEP)
+}
+
+/** Base cell min size in rem before operator scale (dense boards stay readable). */
+export function baseTicketCellRem(totalTickets: number) {
+  if (totalTickets > 300) return 2.15
+  if (totalTickets > 120) return 2.4
+  return 2.75
+}
+
+export function ticketCellRem(totalTickets: number, scale: number) {
+  const rem = baseTicketCellRem(totalTickets) * clampTicketScale(scale)
+  return `${rem.toFixed(2)}rem`
 }
 
 function toSet(values: Iterable<number>) {

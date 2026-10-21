@@ -3,9 +3,11 @@ import {
   AppWindow,
   FolderOpen,
   ImagePlus,
+  Minus,
   MonitorPlay,
   Pause,
   Play,
+  Plus,
   RotateCcw,
   Save,
   Settings2,
@@ -27,7 +29,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
-import { MAX_TICKETS } from '@/lib/drawRules'
+import {
+  MAX_TICKET_SCALE,
+  MAX_TICKETS,
+  MIN_TICKET_SCALE,
+  nudgeTicketScale,
+  TICKET_SCALE_STEP,
+} from '@/lib/drawRules'
 import { formatSavedAt } from '@/lib/sessionPersist'
 import { formatTicket } from '@/lib/utils'
 import type { DrawSession } from '@/hooks/useDrawSession'
@@ -520,6 +528,54 @@ export function OperatorPanel({
           />
           <p className="text-xs text-[var(--ink-faint)]">
             {paceSeconds.toFixed(paceSeconds < 10 ? 1 : 0)}s between draws · editable live
+          </p>
+        </section>
+
+        <section className="operator-section space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="ticket-scale">Ticket size</Label>
+            <p className="font-mono text-sm text-[var(--ink-muted)]" aria-live="polite">
+              {Math.round((config.ticketScale ?? 1) * 100)}%
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              disabled={(config.ticketScale ?? 1) <= MIN_TICKET_SCALE}
+              onClick={() => applyConfig({ ticketScale: nudgeTicketScale(config.ticketScale ?? 1, -1) })}
+              aria-label="Decrease ticket size"
+              title="Smaller tickets (−)"
+            >
+              <Minus className="size-4" />
+            </Button>
+            <Slider
+              id="ticket-scale"
+              value={[config.ticketScale ?? 1]}
+              min={MIN_TICKET_SCALE}
+              max={MAX_TICKET_SCALE}
+              step={TICKET_SCALE_STEP}
+              onValueChange={(v) => applyConfig({ ticketScale: v[0] ?? 1 })}
+              aria-label="Ticket board cell size"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="shrink-0"
+              disabled={(config.ticketScale ?? 1) >= MAX_TICKET_SCALE}
+              onClick={() => applyConfig({ ticketScale: nudgeTicketScale(config.ticketScale ?? 1, 1) })}
+              aria-label="Increase ticket size"
+              title="Larger tickets (+)"
+            >
+              <Plus className="size-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-[var(--ink-faint)]">
+            Stage / projection zoom · keys <kbd className="text-[var(--ink-muted)]">+</kbd> /{' '}
+            <kbd className="text-[var(--ink-muted)]">−</kbd> · scrolls when large
           </p>
         </section>
 

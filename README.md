@@ -53,6 +53,7 @@ Give the `DD2....` code to the customer after payment. Codes must be activated w
 3. **Right-click** a ticket on the board to hold it out (e.g. auction / higher sale), then right-click again later to bring it back into the draw. Held tickets are teal (dashed); drawn-out tickets stay red and cannot return.
 4. Set **Draw pace**, then **Start**. Pause and reset as needed during a live event.
    On the desktop app, **Stage** and **Operator** open as separate windows (operator stays on top so it never covers the board). In the browser, use **Pop out** for the same split.
+   In **projection** / fullscreen, use **Ticket size** in the operator panel (or `+` / `−` keys, or the on-stage size controls) so numbers stay readable on a big screen. Size persists with the session; the board scrolls if zoomed large.
 5. When the draw **stops at your stop number**, award the prize, set a **new (lower) stop** for the next prize, and continue — no reset required.
 6. Sessions **autosave** locally. Use **Save** / **Ctrl+S**, **Export** a JSON file, or **Load** to pick up later if something goes wrong.
 7. **Uninstall**: in the installed Windows app, open **Setup → Uninstall Draw Down** (or the app menu). That also clears activation data on this PC. If an older install left you still activated after uninstall, use **Setup → Clear activation on this PC**. Portable builds: delete the folder (and clear activation in Setup if needed).
@@ -66,6 +67,7 @@ Give the `DD2....` code to the customer after payment. Codes must be activated w
 | Starting tickets | 400 |
 | Stop when remaining | 1 |
 | Pace between draws | 2.5s |
+| Ticket size scale | 100% (70%–240%) |
 
 ## Build Windows installer (share with attendees)
 

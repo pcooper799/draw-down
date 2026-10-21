@@ -11,6 +11,7 @@ import {
   canInsureTicket,
   clampPaceMs,
   clampStopAt,
+  clampTicketScale,
   clampTotalTickets,
   MAX_TICKETS,
   normalizeTicketList,
@@ -73,6 +74,7 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
     totalTickets: total,
     stopAt,
     paceMs: clampPaceMs(snapshot.config.paceMs),
+    ticketScale: clampTicketScale(snapshot.config.ticketScale ?? 1),
   }
   const eliminated = snapshot.eliminated.filter((n) => n >= 1 && n <= total)
   const heldOut = normalizeTicketList(snapshot.heldOut ?? [], total, eliminated)
@@ -279,6 +281,7 @@ export function useDrawSession() {
         merged.totalTickets = clampTotalTickets(merged.totalTickets, merged.stopAt)
         merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
         merged.paceMs = clampPaceMs(merged.paceMs)
+        merged.ticketScale = clampTicketScale(merged.ticketScale)
         if (!merged.orgName?.trim()) merged.orgName = prev.orgName
         configRef.current = merged
         return merged

@@ -175,7 +175,7 @@
   .ticket-board-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(var(--ticket-min, 2.4rem), 1fr));
-    gap: 0.32rem;
+    gap: max(0.2rem, calc(var(--ticket-min, 2.4rem) * 0.12));
   }
 
   .ticket-cell {
@@ -184,7 +184,8 @@
     min-height: var(--ticket-min, 2.4rem);
     border: 1px solid transparent;
     font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
-    font-size: clamp(0.62rem, 1.05vw, 0.85rem);
+    /* Scale digits with cell size so projection zoom stays readable. */
+    font-size: max(0.55rem, calc(var(--ticket-min, 2.4rem) * 0.34));
     font-weight: 700;
     letter-spacing: 0.02em;
     line-height: 1;

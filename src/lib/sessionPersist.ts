@@ -1,6 +1,7 @@
 import {
   clampPaceMs,
   clampStopAt,
+  clampTicketScale,
   clampTotalTickets,
   normalizeTicketList,
   pruneInsuranceMarks,
@@ -90,6 +91,9 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
     totalTickets,
     stopAt,
     paceMs: clampPaceMs(Number(data.config.paceMs) || DEFAULT_CONFIG.paceMs),
+    ticketScale: clampTicketScale(
+      Number(data.config.ticketScale) || DEFAULT_CONFIG.ticketScale,
+    ),
     orgName: String(data.config.orgName || DEFAULT_CONFIG.orgName),
     brandImageDataUrl:
       typeof data.config.brandImageDataUrl === 'string' || data.config.brandImageDataUrl === null

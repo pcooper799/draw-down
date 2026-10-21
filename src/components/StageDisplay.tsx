@@ -15,6 +15,7 @@ type StageDisplayProps = {
   insuredRemaining: number
   pool: Ticket[]
   heldOut: number[]
+  ticketScale?: number
   onToggleHold?: (ticket: number) => void
 }
 
@@ -31,6 +32,7 @@ export function StageDisplay({
   insuredRemaining,
   pool,
   heldOut,
+  ticketScale = 1,
   onToggleHold,
 }: StageDisplayProps) {
   const outcome = lastDrawn?.outcome
@@ -133,6 +135,7 @@ export function StageDisplay({
             pool={pool}
             heldOut={heldOut}
             digits={digits}
+            ticketScale={ticketScale}
             lastDrawnTicket={lastDrawn?.ticket ?? null}
             onToggleHold={onToggleHold}
           />
