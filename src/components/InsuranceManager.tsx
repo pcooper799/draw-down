@@ -17,6 +17,7 @@ export function InsuranceManager({ session, locked }: Props) {
     insuranceMarks,
     insuredCount,
     eliminated,
+    heldOut,
     setTicketInsured,
     clearAllInsurance,
     digits,
@@ -25,9 +26,13 @@ export function InsuranceManager({ session, locked }: Props) {
   const [ticketInput, setTicketInput] = useState('')
 
   const eliminatedSet = useMemo(() => new Set(eliminated), [eliminated])
+  const heldSet = useMemo(() => new Set(heldOut), [heldOut])
 
   const insuredList = useMemo(
-    () => [...insuranceMarks].filter((n) => !eliminatedSet.has(n)).sort((a, b) => a - b),
+    () =>
+      [...insuranceMarks]
+        .filter((n) => !eliminatedSet.has(n))
+        .sort((a, b) => a - b),
     [insuranceMarks, eliminatedSet],
   )
 
@@ -35,7 +40,8 @@ export function InsuranceManager({ session, locked }: Props) {
   const inRange =
     Number.isFinite(ticketNum) && ticketNum >= 1 && ticketNum <= config.totalTickets
   const alreadyOut = inRange && eliminatedSet.has(ticketNum)
-  const ticketValid = inRange && !alreadyOut
+  const isHeld = inRange && heldSet.has(ticketNum)
+  const ticketValid = inRange && !alreadyOut && !isHeld
   const alreadyInsured = ticketValid && insuranceMarks.has(ticketNum)
 
   const addInsurance = () => {
@@ -106,6 +112,11 @@ export function InsuranceManager({ session, locked }: Props) {
         </div>
         {alreadyOut && (
           <p className="text-xs text-[var(--danger)]">Ticket {ticketNum} is already out.</p>
+        )}
+        {isHeld && !alreadyOut && (
+          <p className="text-xs text-[var(--held)]">
+            Ticket {ticketNum} is held out — right-click the board cell to bring it back first.
+          </p>
         )}
       </div>
 

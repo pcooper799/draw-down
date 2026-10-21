@@ -14,6 +14,8 @@ type StageDisplayProps = {
   digits: number
   insuredRemaining: number
   pool: Ticket[]
+  heldOut: number[]
+  onToggleHold?: (ticket: number) => void
 }
 
 export function StageDisplay({
@@ -28,6 +30,8 @@ export function StageDisplay({
   digits,
   insuredRemaining,
   pool,
+  heldOut,
+  onToggleHold,
 }: StageDisplayProps) {
   const outcome = lastDrawn?.outcome
   const isReturned = outcome === 'returned'
@@ -127,8 +131,10 @@ export function StageDisplay({
           <TicketBoard
             totalTickets={totalTickets}
             pool={pool}
+            heldOut={heldOut}
             digits={digits}
             lastDrawnTicket={lastDrawn?.ticket ?? null}
+            onToggleHold={onToggleHold}
           />
         </div>
 

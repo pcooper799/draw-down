@@ -19,11 +19,33 @@ function clampStopAt(stopAt, totalTickets) {
   return Math.min(total, Math.max(MIN_STOP_AT, Math.floor(stopAt)))
 }
 
-function canInsureTicket(ticket, totalTickets, eliminated) {
+function canInsureTicket(ticket, totalTickets, eliminated, heldOut = []) {
   if (!Number.isFinite(ticket)) return false
   const n = Math.floor(ticket)
   if (n < 1 || n > totalTickets) return false
-  return !new Set(eliminated).has(n)
+  return !new Set(eliminated).has(n) && !new Set(heldOut).has(n)
+}
+
+/** Hold/restore auction tickets without treating them as drawn-out. */
+function toggleHold(pool, heldOut, eliminated, ticket) {
+  if (eliminated.includes(ticket)) return { pool, heldOut, ok: false, reason: 'eliminated' }
+  if (heldOut.includes(ticket)) {
+    return {
+      pool: [...pool, { number: ticket, insured: false }].sort((a, b) => a.number - b.number),
+      heldOut: heldOut.filter((n) => n !== ticket),
+      ok: true,
+      reason: 'restored',
+    }
+  }
+  if (!pool.some((t) => t.number === ticket)) {
+    return { pool, heldOut, ok: false, reason: 'missing' }
+  }
+  return {
+    pool: pool.filter((t) => t.number !== ticket),
+    heldOut: [ticket, ...heldOut.filter((n) => n !== ticket)],
+    ok: true,
+    reason: 'held',
+  }
 }
 
 function pruneInsuranceMarks(marks, totalTickets, eliminated) {
@@ -35,12 +57,13 @@ function pruneInsuranceMarks(marks, totalTickets, eliminated) {
   return next
 }
 
-function hasLiveEventProgress({ status, eliminatedCount, historyCount }) {
+function hasLiveEventProgress({ status, eliminatedCount, historyCount, heldOutCount = 0 }) {
   return (
     status === 'running' ||
     status === 'paused' ||
     eliminatedCount > 0 ||
-    historyCount > 0
+    historyCount > 0 ||
+    heldOutCount > 0
   )
 }
 
@@ -110,7 +133,32 @@ function assert(name, cond, detail) {
 }
 
 assert('cannot insure eliminated', !canInsureTicket(3, 10, [3]), null)
+assert('cannot insure held', !canInsureTicket(5, 10, [], [5]), null)
 assert('can insure active', canInsureTicket(4, 10, [3]), null)
+
+{
+  let pool = buildPool(5, new Set([2]))
+  let heldOut = []
+  const eliminated = [4]
+  let r = toggleHold(pool, heldOut, eliminated, 2)
+  assert('hold removes from pool', r.ok && r.pool.length === 4 && r.heldOut.includes(2), r)
+  pool = r.pool
+  heldOut = r.heldOut
+  r = toggleHold(pool, heldOut, eliminated, 2)
+  assert(
+    'restore brings ticket back',
+    r.ok && r.pool.some((t) => t.number === 2) && r.heldOut.length === 0,
+    r,
+  )
+  r = toggleHold(r.pool, r.heldOut, eliminated, 4)
+  assert('cannot restore eliminated', !r.ok && r.reason === 'eliminated', r)
+}
+
+assert(
+  'held-out counts as live progress',
+  hasLiveEventProgress({ status: 'idle', eliminatedCount: 0, historyCount: 0, heldOutCount: 1 }),
+  null,
+)
 assert(
   'prune drops out-of-range and eliminated',
   [...pruneInsuranceMarks([1, 3, 99], 10, [1])].join(',') === '3',

@@ -19,6 +19,7 @@
     --accent-fg: #1a1206;
     --safe: #5aa87a;
     --warn: #e4c15a;
+    --held: #6ec3c9;
     --danger: #d35a4a;
     font-family: var(--font-sans);
     line-height: 1.45;
@@ -207,12 +208,23 @@
     border-color: rgba(255, 214, 120, 0.65);
   }
 
+  .ticket-cell--held {
+    color: #e8fbfc;
+    background: linear-gradient(160deg, rgba(70, 140, 148, 0.75), rgba(36, 88, 96, 0.6));
+    border-color: rgba(110, 195, 201, 0.65);
+    border-style: dashed;
+  }
+
   .ticket-cell--out {
     color: rgba(243, 230, 200, 0.5);
     background: linear-gradient(160deg, rgba(180, 70, 58, 0.7), rgba(120, 40, 34, 0.55));
     border-color: rgba(211, 90, 74, 0.55);
     text-decoration: line-through;
     text-decoration-thickness: 1px;
+  }
+
+  .ticket-cell--interactive {
+    cursor: context-menu;
   }
 
   .ticket-cell--last {
@@ -236,6 +248,11 @@
 
   .legend-swatch--active {
     background: rgba(228, 193, 90, 0.95);
+  }
+
+  .legend-swatch--held {
+    background: rgba(110, 195, 201, 0.9);
+    border-style: dashed;
   }
 
   .legend-swatch--out {

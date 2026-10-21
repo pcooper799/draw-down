@@ -2,6 +2,7 @@ import {
   clampPaceMs,
   clampStopAt,
   clampTotalTickets,
+  normalizeTicketList,
   pruneInsuranceMarks,
 } from '@/lib/drawRules'
 import type { DrawEvent, DrawStatus, SessionConfig, Ticket } from '@/types'
@@ -16,6 +17,8 @@ export type SessionSnapshot = {
   config: SessionConfig
   insuranceMarks: number[]
   eliminated: number[]
+  /** Temporarily removed for auction / re-entry; not permanently eliminated. */
+  heldOut?: number[]
   history: DrawEvent[]
   lastDrawn: DrawEvent | null
   /** Running sessions restore as paused so the operator can resume safely. */
@@ -26,6 +29,7 @@ export type LiveSessionSlice = {
   config: SessionConfig
   insuranceMarks: Set<number>
   eliminated: number[]
+  heldOut: number[]
   history: DrawEvent[]
   lastDrawn: DrawEvent | null
   status: DrawStatus
@@ -35,15 +39,17 @@ export function buildPoolFromSnapshot(
   totalTickets: number,
   eliminated: number[],
   insuranceMarks: Set<number>,
+  heldOut: number[] = [],
 ): Ticket[] {
   const out = new Set(eliminated)
+  const held = new Set(heldOut)
   return Array.from({ length: totalTickets }, (_, i) => {
     const number = i + 1
     return {
       number,
-      insured: !out.has(number) && insuranceMarks.has(number),
+      insured: !out.has(number) && !held.has(number) && insuranceMarks.has(number),
     }
-  }).filter((t) => !out.has(t.number))
+  }).filter((t) => !out.has(t.number) && !held.has(t.number))
 }
 
 export function toSnapshot(live: LiveSessionSlice): SessionSnapshot {
@@ -56,6 +62,7 @@ export function toSnapshot(live: LiveSessionSlice): SessionSnapshot {
     config: live.config,
     insuranceMarks: [...live.insuranceMarks].sort((a, b) => a - b),
     eliminated: [...live.eliminated],
+    heldOut: [...live.heldOut],
     history: live.history.slice(0, 50),
     lastDrawn: live.lastDrawn,
     status,
@@ -98,6 +105,12 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
     eliminated.push(n)
   }
 
+  const heldOut = normalizeTicketList(
+    Array.isArray(data.heldOut) ? data.heldOut : [],
+    totalTickets,
+    eliminated,
+  )
+
   const insuranceMarks = [
     ...pruneInsuranceMarks(
       Array.isArray(data.insuranceMarks)
@@ -119,6 +132,7 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
     config,
     insuranceMarks,
     eliminated,
+    heldOut,
     history: Array.isArray(data.history) ? (data.history as DrawEvent[]) : [],
     lastDrawn: data.lastDrawn ?? null,
     status,

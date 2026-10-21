@@ -5,6 +5,7 @@ import {
   clampStopAt,
   clampTotalTickets,
   MAX_TICKETS,
+  normalizeTicketList,
   pruneInsuranceMarks,
 } from '@/lib/drawRules'
 import {
@@ -42,12 +43,14 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
     paceMs: clampPaceMs(snapshot.config.paceMs),
   }
   const eliminated = snapshot.eliminated.filter((n) => n >= 1 && n <= total)
+  const heldOut = normalizeTicketList(snapshot.heldOut ?? [], total, eliminated)
   const marks = pruneInsuranceMarks(snapshot.insuranceMarks, total, eliminated)
   return {
     config,
     insuranceMarks: marks,
-    pool: buildPoolFromSnapshot(total, eliminated, marks),
+    pool: buildPoolFromSnapshot(total, eliminated, marks, heldOut),
     eliminated,
+    heldOut,
     history: snapshot.history,
     lastDrawn: snapshot.lastDrawn,
     status: snapshot.status as DrawStatus,
@@ -63,6 +66,7 @@ export function useDrawSession() {
       insuranceMarks: new Set<number>(),
       pool: buildPool(DEFAULT_CONFIG.totalTickets, new Set()),
       eliminated: [] as number[],
+      heldOut: [] as number[],
       history: [] as DrawEvent[],
       lastDrawn: null as DrawEvent | null,
       status: 'idle' as DrawStatus,
@@ -74,6 +78,7 @@ export function useDrawSession() {
   const [insuranceMarks, setInsuranceMarks] = useState<Set<number>>(() => initial.insuranceMarks)
   const [pool, setPool] = useState<Ticket[]>(() => initial.pool)
   const [eliminated, setEliminated] = useState<number[]>(() => initial.eliminated)
+  const [heldOut, setHeldOut] = useState<number[]>(() => initial.heldOut)
   const [history, setHistory] = useState<DrawEvent[]>(() => initial.history)
   const [status, setStatus] = useState<DrawStatus>(initial.status)
   const [lastDrawn, setLastDrawn] = useState<DrawEvent | null>(initial.lastDrawn)
@@ -89,6 +94,7 @@ export function useDrawSession() {
   const configRef = useRef(config)
   const insuranceRef = useRef(insuranceMarks)
   const eliminatedRef = useRef(eliminated)
+  const heldOutRef = useRef(heldOut)
   const historyRef = useRef(history)
   const lastDrawnRef = useRef(lastDrawn)
   const readyToAutosave = useRef(false)
@@ -110,6 +116,9 @@ export function useDrawSession() {
   useEffect(() => {
     eliminatedRef.current = eliminated
   }, [eliminated])
+  useEffect(() => {
+    heldOutRef.current = heldOut
+  }, [heldOut])
   useEffect(() => {
     historyRef.current = history
   }, [history])
@@ -165,7 +174,15 @@ export function useDrawSession() {
   const setTicketInsured = useCallback(
     (ticket: number, insured: boolean) => {
       if (statusRef.current === 'running') return
-      if (insured && !canInsureTicket(ticket, configRef.current.totalTickets, eliminatedRef.current)) {
+      if (
+        insured &&
+        !canInsureTicket(
+          ticket,
+          configRef.current.totalTickets,
+          eliminatedRef.current,
+          heldOutRef.current,
+        )
+      ) {
         setSaveNotice('That ticket is already out — cannot insure it')
         return
       }
@@ -203,12 +220,14 @@ export function useDrawSession() {
       const nextPool = buildPool(safeTotal, pruned)
       poolRef.current = nextPool
       eliminatedRef.current = []
+      heldOutRef.current = []
       historyRef.current = []
       lastDrawnRef.current = null
       statusRef.current = 'idle'
       insuranceRef.current = pruned
       setPool(nextPool)
       setEliminated([])
+      setHeldOut([])
       setHistory([])
       setLastDrawn(null)
       setStatus('idle')
@@ -216,6 +235,66 @@ export function useDrawSession() {
     },
     [clearTimer],
   )
+
+  const toggleTicketHold = useCallback((ticket: number) => {
+    const total = configRef.current.totalTickets
+    if (!Number.isFinite(ticket)) return
+    const n = Math.floor(ticket)
+    if (n < 1 || n > total) return
+    if (eliminatedRef.current.includes(n)) {
+      setSaveNotice(`#${n} was drawn out — cannot bring back`)
+      return
+    }
+
+    const isHeld = heldOutRef.current.includes(n)
+    if (isHeld) {
+      // Bring back into the draw (keeps insurance mark if still set)
+      const nextHeld = heldOutRef.current.filter((x) => x !== n)
+      heldOutRef.current = nextHeld
+      setHeldOut(nextHeld)
+      const insured = insuranceRef.current.has(n)
+      const nextPool = [...poolRef.current, { number: n, insured }].sort(
+        (a, b) => a.number - b.number,
+      )
+      poolRef.current = nextPool
+      setPool(nextPool)
+      if (statusRef.current === 'finished' && nextPool.length > configRef.current.stopAt) {
+        statusRef.current = 'paused'
+        setStatus('paused')
+      }
+      setSaveNotice(`#${n} back in the draw`)
+      return
+    }
+
+    // Hold out of the pool for auction / higher sale
+    if (!poolRef.current.some((t) => t.number === n)) {
+      setSaveNotice(`#${n} is not in the draw`)
+      return
+    }
+
+    if (statusRef.current === 'running') {
+      clearTimer()
+      drawLockRef.current = false
+      statusRef.current = 'paused'
+      setStatus('paused')
+    }
+
+    const nextPool = poolRef.current.filter((t) => t.number !== n)
+    poolRef.current = nextPool
+    setPool(nextPool)
+    const nextHeld = [n, ...heldOutRef.current.filter((x) => x !== n)]
+    heldOutRef.current = nextHeld
+    setHeldOut(nextHeld)
+
+    if (nextPool.length <= configRef.current.stopAt) {
+      statusRef.current = 'finished'
+      setStatus('finished')
+      clearTimer()
+      drawLockRef.current = false
+    }
+
+    setSaveNotice(`#${n} held out — right-click to bring back`)
+  }, [clearTimer])
 
   const commitTotalTickets = useCallback(
     (total: number) => {
@@ -246,6 +325,7 @@ export function useDrawSession() {
       config: configRef.current,
       insuranceMarks: insuranceRef.current,
       eliminated: eliminatedRef.current,
+      heldOut: heldOutRef.current,
       history: historyRef.current,
       lastDrawn: lastDrawnRef.current,
       status: statusRef.current,
@@ -261,6 +341,7 @@ export function useDrawSession() {
       insuranceRef.current = hydrated.insuranceMarks
       poolRef.current = hydrated.pool
       eliminatedRef.current = hydrated.eliminated
+      heldOutRef.current = hydrated.heldOut
       historyRef.current = hydrated.history
       lastDrawnRef.current = hydrated.lastDrawn
       statusRef.current = hydrated.status
@@ -268,6 +349,7 @@ export function useDrawSession() {
       setInsuranceMarks(hydrated.insuranceMarks)
       setPool(hydrated.pool)
       setEliminated(hydrated.eliminated)
+      setHeldOut(hydrated.heldOut)
       setHistory(hydrated.history)
       setLastDrawn(hydrated.lastDrawn)
       setStatus(hydrated.status)
@@ -277,6 +359,7 @@ export function useDrawSession() {
           config: hydrated.config,
           insuranceMarks: hydrated.insuranceMarks,
           eliminated: hydrated.eliminated,
+          heldOut: hydrated.heldOut,
           history: hydrated.history,
           lastDrawn: hydrated.lastDrawn,
           status: hydrated.status,
@@ -338,6 +421,7 @@ export function useDrawSession() {
     config,
     insuranceMarks,
     eliminated,
+    heldOut,
     history,
     lastDrawn,
     status,
@@ -481,6 +565,7 @@ export function useDrawSession() {
           config: configRef.current,
           insuranceMarks: insuranceRef.current,
           eliminated: eliminatedRef.current,
+          heldOut: heldOutRef.current,
           history: historyRef.current,
           lastDrawn: lastDrawnRef.current,
           status: 'paused',
@@ -522,6 +607,7 @@ export function useDrawSession() {
     insuredCount: insuredRemaining,
     insuranceMarks,
     eliminated,
+    heldOut,
     history,
     status,
     lastDrawn,
@@ -533,6 +619,7 @@ export function useDrawSession() {
     resetSession,
     setTicketInsured,
     clearAllInsurance,
+    toggleTicketHold,
     drawOnce,
     saveNow,
     exportSaveFile,

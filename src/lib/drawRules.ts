@@ -23,17 +23,23 @@ export function clampPaceMs(paceMs: number) {
   return Math.min(MAX_PACE_MS, Math.max(MIN_PACE_MS, Math.round(paceMs)))
 }
 
-/** True when a ticket number can still receive insurance (still in the pool). */
+function toSet(values: Iterable<number>) {
+  return values instanceof Set ? values : new Set(values)
+}
+
+/** True when a ticket number can still receive insurance (still in the draw pool). */
 export function canInsureTicket(
   ticket: number,
   totalTickets: number,
   eliminated: Iterable<number>,
+  heldOut: Iterable<number> = [],
 ) {
   if (!Number.isFinite(ticket)) return false
   const n = Math.floor(ticket)
   if (n < 1 || n > totalTickets) return false
-  const out = eliminated instanceof Set ? eliminated : new Set(eliminated)
-  return !out.has(n)
+  const out = toSet(eliminated)
+  const held = toSet(heldOut)
+  return !out.has(n) && !held.has(n)
 }
 
 export function pruneInsuranceMarks(
@@ -41,12 +47,31 @@ export function pruneInsuranceMarks(
   totalTickets: number,
   eliminated: Iterable<number>,
 ) {
-  const out = eliminated instanceof Set ? eliminated : new Set(eliminated)
+  const out = toSet(eliminated)
   const next = new Set<number>()
   for (const n of marks) {
+    // Keep marks for held-out tickets so auction restores keep insurance.
     if (Number.isFinite(n) && n >= 1 && n <= totalTickets && !out.has(n)) {
       next.add(n)
     }
+  }
+  return next
+}
+
+export function normalizeTicketList(
+  values: Iterable<number>,
+  totalTickets: number,
+  exclude: Iterable<number> = [],
+) {
+  const blocked = toSet(exclude)
+  const next: number[] = []
+  const seen = new Set<number>()
+  for (const raw of values) {
+    if (!Number.isFinite(raw)) continue
+    const n = Math.floor(raw)
+    if (n < 1 || n > totalTickets || blocked.has(n) || seen.has(n)) continue
+    seen.add(n)
+    next.push(n)
   }
   return next
 }
@@ -56,11 +81,13 @@ export function hasLiveEventProgress(input: {
   status: string
   eliminatedCount: number
   historyCount: number
+  heldOutCount?: number
 }) {
   return (
     input.status === 'running' ||
     input.status === 'paused' ||
     input.eliminatedCount > 0 ||
-    input.historyCount > 0
+    input.historyCount > 0 ||
+    (input.heldOutCount ?? 0) > 0
   )
 }

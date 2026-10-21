@@ -45,6 +45,7 @@ export default function App() {
     status,
     eliminatedCount: eliminated.length,
     historyCount: history.length,
+    heldOutCount: session.heldOut.length,
   })
 
   // Hard gate only when there is no in-progress event to protect
@@ -162,6 +163,8 @@ export default function App() {
         digits={session.digits}
         insuredRemaining={session.insuredRemaining}
         pool={session.pool}
+        heldOut={session.heldOut}
+        onToggleHold={license.licensed ? session.toggleTicketHold : undefined}
       />
 
       {!projectionMode && (

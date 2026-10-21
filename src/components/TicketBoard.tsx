@@ -1,20 +1,26 @@
-import { useMemo } from 'react'
+import { useMemo, type MouseEvent } from 'react'
 import { formatTicket } from '@/lib/utils'
 import type { Ticket } from '@/types'
 
-export type TicketBoardState = 'insured' | 'active' | 'out'
+export type TicketBoardState = 'insured' | 'active' | 'held' | 'out'
 
 type TicketBoardProps = {
   totalTickets: number
   pool: Ticket[]
+  heldOut: number[]
   digits: number
   lastDrawnTicket: number | null
+  /** Right-click: hold an in-pool ticket out, or bring a held ticket back. */
+  onToggleHold?: (ticket: number) => void
+  interactive?: boolean
 }
 
 export function ticketState(
   number: number,
   inPool: Map<number, Ticket>,
+  held: Set<number>,
 ): TicketBoardState {
+  if (held.has(number)) return 'held'
   const ticket = inPool.get(number)
   if (!ticket) return 'out'
   return ticket.insured ? 'insured' : 'active'
@@ -23,14 +29,19 @@ export function ticketState(
 export function TicketBoard({
   totalTickets,
   pool,
+  heldOut,
   digits,
   lastDrawnTicket,
+  onToggleHold,
+  interactive = Boolean(onToggleHold),
 }: TicketBoardProps) {
   const inPool = useMemo(() => {
     const map = new Map<number, Ticket>()
     for (const t of pool) map.set(t.number, t)
     return map
   }, [pool])
+
+  const held = useMemo(() => new Set(heldOut), [heldOut])
 
   const numbers = useMemo(
     () => Array.from({ length: totalTickets }, (_, i) => i + 1),
@@ -40,11 +51,19 @@ export function TicketBoard({
   // Dense but projection-readable: ~2.4–3.2rem cells; scroll when needed
   const minCell = totalTickets > 300 ? '2.15rem' : totalTickets > 120 ? '2.4rem' : '2.75rem'
 
+  const handleContextMenu = (event: MouseEvent, n: number, state: TicketBoardState) => {
+    if (!onToggleHold) return
+    if (state === 'out') return
+    event.preventDefault()
+    onToggleHold(n)
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--ink-faint)]">
           Ticket board · {totalTickets}
+          {heldOut.length > 0 ? ` · ${heldOut.length} held` : ''}
         </p>
         <Legend />
       </div>
@@ -57,22 +76,28 @@ export function TicketBoard({
           aria-label="All ticket numbers"
         >
           {numbers.map((n) => {
-            const state = ticketState(n, inPool)
+            const state = ticketState(n, inPool, held)
             const isLast = lastDrawnTicket === n
+            const canToggle = interactive && state !== 'out'
             return (
               <div
                 key={n}
                 role="listitem"
                 data-state={state}
                 data-last={isLast ? 'true' : undefined}
-                className={`ticket-cell ticket-cell--${state}${isLast ? ' ticket-cell--last' : ''}`}
+                className={`ticket-cell ticket-cell--${state}${isLast ? ' ticket-cell--last' : ''}${
+                  canToggle ? ' ticket-cell--interactive' : ''
+                }`}
                 title={
                   state === 'insured'
-                    ? `#${n} insured · in pool`
+                    ? `#${n} insured · right-click to hold out`
                     : state === 'active'
-                      ? `#${n} in draw · no insurance`
-                      : `#${n} eliminated`
+                      ? `#${n} in draw · right-click to hold out`
+                      : state === 'held'
+                        ? `#${n} held out (auction) · right-click to bring back`
+                        : `#${n} eliminated`
                 }
+                onContextMenu={(event) => handleContextMenu(event, n, state)}
               >
                 {formatTicket(n, digits)}
               </div>
@@ -94,6 +119,10 @@ function Legend() {
       <li className="flex items-center gap-1.5 text-[var(--warn)]">
         <span className="legend-swatch legend-swatch--active" aria-hidden />
         In draw
+      </li>
+      <li className="flex items-center gap-1.5 text-[var(--held)]">
+        <span className="legend-swatch legend-swatch--held" aria-hidden />
+        Held
       </li>
       <li className="flex items-center gap-1.5 text-[var(--danger)]">
         <span className="legend-swatch legend-swatch--out" aria-hidden />

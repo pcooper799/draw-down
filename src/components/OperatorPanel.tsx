@@ -376,7 +376,14 @@ export function OperatorPanel({
           )}
         </section>
 
-        <section className="operator-section">
+        <section className="operator-section space-y-2">
+          <p className="text-xs text-[var(--ink-faint)]">
+            Right-click a ticket on the board to hold it out (auction), then right-click again to
+            bring it back in. Drawn-out tickets stay out.
+            {session.heldOut.length > 0
+              ? ` · ${session.heldOut.length} held now.`
+              : ''}
+          </p>
           <InsuranceManager session={session} locked={drawLocked || controlsLocked} />
         </section>
 
