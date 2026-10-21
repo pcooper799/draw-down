@@ -17,5 +17,9 @@ interface Window {
     platform: NodeJS.Platform
     getInstallInfo?: () => Promise<DrawDownInstallInfo>
     uninstall?: () => Promise<DrawDownUninstallResult>
+    showOperatorWindow?: () => Promise<{ ok: boolean }>
+    focusStageWindow?: () => Promise<{ ok: boolean }>
+    bridgePublish?: (message: unknown) => void
+    onBridgeMessage?: (handler: (message: unknown) => void) => () => void
   }
 }

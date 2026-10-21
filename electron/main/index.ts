@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, screen, shell } from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -30,7 +30,8 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0)
 }
 
-let win: BrowserWindow | null = null
+let stageWin: BrowserWindow | null = null
+let operatorWin: BrowserWindow | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
@@ -81,7 +82,6 @@ async function launchUninstaller(): Promise<{ ok: boolean; reason?: string }> {
   }
 
   try {
-    // Detach so the uninstaller can close this process and finish removal.
     const child = spawn(uninstaller, [], {
       detached: true,
       stdio: 'ignore',
@@ -98,6 +98,112 @@ async function launchUninstaller(): Promise<{ ok: boolean; reason?: string }> {
       reason: error instanceof Error ? error.message : 'Could not start uninstaller',
     }
   }
+}
+
+async function loadRole(win: BrowserWindow, role: 'stage' | 'operator') {
+  if (VITE_DEV_SERVER_URL) {
+    const base = VITE_DEV_SERVER_URL.replace(/\/$/, '')
+    await win.loadURL(`${base}/?window=${role}`)
+  } else {
+    await win.loadFile(indexHtml, { query: { window: role } })
+  }
+}
+
+function wireExternalLinks(win: BrowserWindow) {
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https:') || url.startsWith('http:')) {
+      shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+}
+
+function broadcastBridge(message: unknown, except?: Electron.WebContents) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
+    if (except && win.webContents.id === except.id) continue
+    win.webContents.send('draw-down:bridge', message)
+  }
+}
+
+async function createStageWindow() {
+  const primary = screen.getPrimaryDisplay().workArea
+  stageWin = new BrowserWindow({
+    title: 'Draw Down — Stage',
+    x: primary.x + 40,
+    y: primary.y + 40,
+    width: Math.min(1400, primary.width - 80),
+    height: Math.min(900, primary.height - 80),
+    minWidth: 900,
+    minHeight: 600,
+    backgroundColor: '#0b1210',
+    show: false,
+    icon: resolveAppIcon(),
+    webPreferences: {
+      preload,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  stageWin.once('ready-to-show', () => stageWin?.show())
+  stageWin.on('closed', () => {
+    stageWin = null
+    // Closing the stage ends the event app.
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.close()
+    }
+  })
+
+  wireExternalLinks(stageWin)
+  await loadRole(stageWin, 'stage')
+}
+
+async function createOperatorWindow() {
+  if (operatorWin && !operatorWin.isDestroyed()) {
+    if (operatorWin.isMinimized()) operatorWin.restore()
+    operatorWin.show()
+    operatorWin.focus()
+    return operatorWin
+  }
+
+  const primary = screen.getPrimaryDisplay().workArea
+  const width = 440
+  operatorWin = new BrowserWindow({
+    title: 'Draw Down — Operator',
+    x: primary.x + Math.max(40, primary.width - width - 40),
+    y: primary.y + 60,
+    width,
+    height: Math.min(960, primary.height - 80),
+    minWidth: 380,
+    minHeight: 560,
+    backgroundColor: '#101816',
+    show: false,
+    alwaysOnTop: true,
+    icon: resolveAppIcon(),
+    webPreferences: {
+      preload,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+
+  operatorWin.once('ready-to-show', () => operatorWin?.show())
+  operatorWin.on('closed', () => {
+    operatorWin = null
+  })
+
+  wireExternalLinks(operatorWin)
+  await loadRole(operatorWin, 'operator')
+  return operatorWin
+}
+
+function focusStageWindow() {
+  if (!stageWin || stageWin.isDestroyed()) return false
+  if (stageWin.isMinimized()) stageWin.restore()
+  stageWin.show()
+  stageWin.focus()
+  return true
 }
 
 function buildAppMenu() {
@@ -122,71 +228,76 @@ function buildAppMenu() {
         process.platform === 'darwin' ? { role: 'close' as const } : { role: 'quit' as const },
       ],
     },
+    {
+      label: 'Window',
+      submenu: [
+        {
+          label: 'Operator controls',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => {
+            void createOperatorWindow()
+          },
+        },
+        {
+          label: 'Stage display',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => {
+            focusStageWindow()
+          },
+        },
+        {
+          label: 'Toggle operator always on top',
+          click: () => {
+            if (!operatorWin || operatorWin.isDestroyed()) return
+            operatorWin.setAlwaysOnTop(!operatorWin.isAlwaysOnTop())
+          },
+        },
+        { type: 'separator' },
+        { role: 'minimize' },
+        { role: 'front' },
+      ],
+    },
     { role: 'editMenu' },
     { role: 'viewMenu' },
-    { role: 'windowMenu' },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-async function createWindow() {
-  win = new BrowserWindow({
-    title: 'Draw Down',
-    width: 1440,
-    height: 900,
-    minWidth: 1100,
-    minHeight: 700,
-    backgroundColor: '#0b1210',
-    show: false,
-    icon: resolveAppIcon(),
-    webPreferences: {
-      preload,
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  })
-
-  win.once('ready-to-show', () => win?.show())
-
-  if (VITE_DEV_SERVER_URL) {
-    await win.loadURL(VITE_DEV_SERVER_URL)
-  } else {
-    await win.loadFile(indexHtml)
-  }
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https:') || url.startsWith('http:')) {
-      shell.openExternal(url)
-    }
-    return { action: 'deny' }
-  })
-}
-
 ipcMain.handle('draw-down:get-install-info', () => getInstallInfo())
 ipcMain.handle('draw-down:uninstall', () => launchUninstaller())
+ipcMain.handle('draw-down:show-operator', async () => {
+  await createOperatorWindow()
+  return { ok: true }
+})
+ipcMain.handle('draw-down:focus-stage', () => ({ ok: focusStageWindow() }))
+ipcMain.on('draw-down:bridge', (event, message) => {
+  broadcastBridge(message, event.sender)
+})
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   buildAppMenu()
-  void createWindow()
+  await createStageWindow()
+  await createOperatorWindow()
 })
 
 app.on('window-all-closed', () => {
-  win = null
+  stageWin = null
+  operatorWin = null
   if (process.platform !== 'darwin') app.quit()
 })
 
 app.on('second-instance', () => {
-  if (win) {
-    if (win.isMinimized()) win.restore()
-    win.focus()
-  }
+  focusStageWindow()
+  void createOperatorWindow()
 })
 
 app.on('activate', () => {
-  const allWindows = BrowserWindow.getAllWindows()
-  if (allWindows.length) {
-    allWindows[0].focus()
+  if (BrowserWindow.getAllWindows().length === 0) {
+    void (async () => {
+      await createStageWindow()
+      await createOperatorWindow()
+    })()
   } else {
-    void createWindow()
+    focusStageWindow()
   }
 })

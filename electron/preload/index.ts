@@ -12,10 +12,26 @@ export type UninstallResult = {
   reason?: string
 }
 
+type BridgeHandler = (message: unknown) => void
+
 contextBridge.exposeInMainWorld('drawDown', {
   platform: process.platform as NodeJS.Platform,
   getInstallInfo: (): Promise<InstallInfo> => ipcRenderer.invoke('draw-down:get-install-info'),
   uninstall: (): Promise<UninstallResult> => ipcRenderer.invoke('draw-down:uninstall'),
+  showOperatorWindow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('draw-down:show-operator'),
+  focusStageWindow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('draw-down:focus-stage'),
+  bridgePublish: (message: unknown) => {
+    ipcRenderer.send('draw-down:bridge', message)
+  },
+  onBridgeMessage: (handler: BridgeHandler) => {
+    const listener = (_event: Electron.IpcRendererEvent, message: unknown) => {
+      handler(message)
+    }
+    ipcRenderer.on('draw-down:bridge', listener)
+    return () => {
+      ipcRenderer.removeListener('draw-down:bridge', listener)
+    }
+  },
 })
 
 function domReady(condition: DocumentReadyState[] = ['complete', 'interactive']) {

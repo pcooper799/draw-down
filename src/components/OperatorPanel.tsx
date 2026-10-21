@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
+  AppWindow,
   FolderOpen,
   ImagePlus,
   MonitorPlay,
@@ -37,6 +38,12 @@ type Props = {
   controlsLocked?: boolean
   /** Wipe activation + local session on this PC (does not refund a code). */
   onClearActivation?: () => void
+  /** True when this panel is already in its own window. */
+  separateWindow?: boolean
+  /** Pop operator into a second window (stage stays clear). */
+  onOpenOperatorWindow?: () => void
+  /** Focus the stage window from the operator window. */
+  onFocusStage?: () => void
 }
 
 export function OperatorPanel({
@@ -45,6 +52,9 @@ export function OperatorPanel({
   licenseBadge,
   controlsLocked = false,
   onClearActivation,
+  separateWindow = false,
+  onOpenOperatorWindow,
+  onFocusStage,
 }: Props) {
   const {
     config,
@@ -162,7 +172,13 @@ export function OperatorPanel({
   }
 
   return (
-    <aside className="operator-panel flex w-full shrink-0 flex-col border-t border-[var(--line)] lg:w-[400px] lg:border-l lg:border-t-0">
+    <aside
+      className={
+        separateWindow
+          ? 'operator-panel flex h-full min-h-0 w-full flex-col'
+          : 'operator-panel flex w-full shrink-0 flex-col border-t border-[var(--line)] lg:w-[400px] lg:border-l lg:border-t-0'
+      }
+    >
       <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5">
         <div>
           <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-[var(--ink-faint)]">
@@ -172,18 +188,49 @@ export function OperatorPanel({
           {licenseBadge}
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            className="gap-2"
-            onClick={onEnterProjection}
-            title="Hide controls for projection (P)"
-            aria-label="Enter projection mode"
-          >
-            <MonitorPlay />
-            Project
-          </Button>
+          {separateWindow ? (
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="gap-2"
+              onClick={onFocusStage ?? onEnterProjection}
+              title="Focus the stage window"
+              aria-label="Focus stage window"
+            >
+              <MonitorPlay />
+              Stage
+            </Button>
+          ) : (
+            <>
+              {onOpenOperatorWindow && (
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="gap-2"
+                  onClick={onOpenOperatorWindow}
+                  title="Open controls in a separate window (stage stays clear)"
+                  aria-label="Open operator window"
+                >
+                  <AppWindow />
+                  Pop out
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={onEnterProjection}
+                title="Hide docked controls for projection (P)"
+                aria-label="Enter projection mode"
+              >
+                <MonitorPlay />
+                Project
+              </Button>
+            </>
+          )}
           <Dialog
             open={settingsOpen}
             onOpenChange={(open) => {
