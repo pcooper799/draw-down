@@ -15,9 +15,9 @@
     "typecheck": "tsc --noEmit",
     "build:vite": "tsc --noEmit && vite build",
     "dist": "npm run dist:win",
-    "dist:win": "npm run build:vite && electron-builder --win nsis portable zip --x64",
-    "dist:win:portable": "npm run build:vite && electron-builder --win portable zip --x64",
-    "dist:dir": "npm run build:vite && electron-builder --win --x64 --dir",
+    "dist:win": "npm run build:vite && electron-builder --win nsis portable zip --x64 --publish never",
+    "dist:win:portable": "npm run build:vite && electron-builder --win portable zip --x64 --publish never",
+    "dist:dir": "npm run build:vite && electron-builder --win --x64 --dir --publish never",
     "release:repo": "node scripts/set-release-repo.mjs",
     "preview": "vite preview --port 43127 --host 127.0.0.1"
   },

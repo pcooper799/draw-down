@@ -29,8 +29,6 @@
     "category": "public.app-category.entertainment"
   },
   "win": {
-    "publisherName": ["Phillip Cooper"],
-    "legalTrademarks": "Phillip Cooper",
     "artifactName": "${productName}-${version}-win-${arch}.${ext}",
     "target": [
       {
