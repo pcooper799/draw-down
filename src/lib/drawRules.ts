@@ -49,6 +49,19 @@ export function ticketCellRem(totalTickets: number, scale: number) {
   return `${rem.toFixed(2)}rem`
 }
 
+/** Normalize prize stop tiers: unique, descending, within 1..totalTickets-? keep >= 1 and < total. */
+export function normalizePrizeTiers(tiers: Iterable<number>, totalTickets: number) {
+  const total = clampTotalTickets(totalTickets)
+  const maxStop = Math.max(1, total - 0) // stop can equal 1..total; typically < total for a draw
+  const cleaned = [...new Set(
+    [...tiers]
+      .filter((n) => Number.isFinite(n))
+      .map((n) => Math.floor(n))
+      .filter((n) => n >= MIN_STOP_AT && n <= maxStop),
+  )].sort((a, b) => b - a)
+  return cleaned.length > 0 ? cleaned : [MIN_STOP_AT]
+}
+
 function toSet(values: Iterable<number>) {
   return values instanceof Set ? values : new Set(values)
 }

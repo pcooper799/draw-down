@@ -5,6 +5,7 @@ import {
   ImagePlus,
   Minus,
   MonitorPlay,
+  OctagonAlert,
   Pause,
   Play,
   Plus,
@@ -13,10 +14,14 @@ import {
   Settings2,
   Download,
   Trash2,
+  Wand2,
 } from 'lucide-react'
 import { AuditPanel } from '@/components/AuditPanel'
+import { EventSetupWizard } from '@/components/EventSetupWizard'
 import { InsuranceManager } from '@/components/InsuranceManager'
+import { ProjectorSafetyMonitor } from '@/components/ProjectorSafetyMonitor'
 import { ResetConfirmDialog } from '@/components/ResetConfirmDialog'
+import { SafeResumeDialog } from '@/components/SafeResumeDialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -61,6 +66,8 @@ type Props = {
   onOpenOperatorWindow?: () => void
   /** Focus the stage window from the operator window. */
   onFocusStage?: () => void
+  /** True when a paid (or dev) license allows live drawing. */
+  licensed?: boolean
 }
 
 export function OperatorPanel({
@@ -74,6 +81,7 @@ export function OperatorPanel({
   separateWindow = false,
   onOpenOperatorWindow,
   onFocusStage,
+  licensed = true,
 }: Props) {
   const {
     config,
@@ -82,6 +90,9 @@ export function OperatorPanel({
     status,
     start,
     pause,
+    emergencyStop,
+    safePaused,
+    confirmSafeResume,
     resetSession,
     drawHasStarted,
     continueWithNewStop,
@@ -103,6 +114,8 @@ export function OperatorPanel({
   const fileRef = useRef<HTMLInputElement>(null)
   const loadRef = useRef<HTMLInputElement>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [resumeConfirmOpen, setResumeConfirmOpen] = useState(false)
   const [totalDraft, setTotalDraft] = useState(String(config.totalTickets))
   const [stopDraft, setStopDraft] = useState(String(config.stopAt))
   const [orgDraft, setOrgDraft] = useState(config.orgName)
@@ -113,6 +126,14 @@ export function OperatorPanel({
   const [canUninstall, setCanUninstall] = useState(false)
   const [dataInfo, setDataInfo] = useState<DrawDownLocalDataInfo | null>(null)
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
+
+  const requestStartOrResume = () => {
+    if (safePaused) {
+      setResumeConfirmOpen(true)
+      return
+    }
+    start()
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -217,6 +238,19 @@ export function OperatorPanel({
           {licenseBadge}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={controlsLocked}
+            onClick={() => setWizardOpen(true)}
+            title="Guided event setup"
+            aria-label="Open event setup wizard"
+          >
+            <Wand2 />
+            Wizard
+          </Button>
           {separateWindow ? (
             <Button
               type="button"
@@ -276,9 +310,10 @@ export function OperatorPanel({
                 className="gap-2"
                 aria-label="Session settings"
                 disabled={controlsLocked}
+                title="Advanced setup & activation tools"
               >
                 <Settings2 />
-                Setup
+                Advanced
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -454,6 +489,26 @@ export function OperatorPanel({
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <section className="space-y-2">
+          <Button
+            type="button"
+            variant="danger"
+            size="lg"
+            className="w-full gap-2 font-semibold tracking-wide"
+            onClick={() => emergencyStop()}
+            aria-label="Emergency stop — safe pause"
+            title="Instantly pause without resetting. Resume requires confirmation."
+          >
+            <OctagonAlert className="size-5" />
+            Emergency Stop
+          </Button>
+          {safePaused && (
+            <p className="text-xs font-medium text-[var(--danger)]">
+              Safe pause active — Start/Resume asks for confirmation. Pool and marks are unchanged.
+            </p>
+          )}
+        </section>
+
         {(saveNotice || lastSavedAt) && (
           <div className="operator-note flex items-center justify-between gap-2 px-3 py-2 text-xs">
             <span className="text-[var(--accent)]">{saveNotice ?? 'Autosave on'}</span>
@@ -462,6 +517,8 @@ export function OperatorPanel({
             )}
           </div>
         )}
+
+        <ProjectorSafetyMonitor session={session} />
 
         <section className="operator-section space-y-3">
           <div className="flex items-center justify-between gap-2">
@@ -582,7 +639,13 @@ export function OperatorPanel({
         <section className="operator-section space-y-3">
           <div className="grid grid-cols-3 gap-2">
             {status === 'running' ? (
-              <Button type="button" variant="secondary" className="col-span-2" size="lg" onClick={pause}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="col-span-2"
+                size="lg"
+                onClick={() => pause()}
+              >
                 <Pause />
                 Pause
               </Button>
@@ -591,13 +654,15 @@ export function OperatorPanel({
                 type="button"
                 className="col-span-2"
                 size="lg"
-                onClick={start}
+                onClick={requestStartOrResume}
                 disabled={controlsLocked || !canResumePastStop}
               >
                 <Play />
-                {status === 'paused' || (status === 'finished' && canResumePastStop)
-                  ? 'Resume'
-                  : 'Start'}
+                {safePaused
+                  ? 'Confirm resume…'
+                  : status === 'paused' || (status === 'finished' && canResumePastStop)
+                    ? 'Resume'
+                    : 'Start'}
               </Button>
             )}
             <Button
@@ -745,6 +810,22 @@ export function OperatorPanel({
         onConfirm={({ operatorName, reason, irreversibleConfirmed }) => {
           discardAutosave()
           resetSession({ operatorName, reason, irreversibleConfirmed })
+        }}
+      />
+
+      <EventSetupWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        session={session}
+        controlsLocked={controlsLocked}
+        licensed={licensed}
+      />
+
+      <SafeResumeDialog
+        open={resumeConfirmOpen}
+        onOpenChange={setResumeConfirmOpen}
+        onConfirm={() => {
+          confirmSafeResume()
         }}
       />
     </aside>

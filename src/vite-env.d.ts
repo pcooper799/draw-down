@@ -19,6 +19,28 @@ type DrawDownLocalDataInfo = {
   sessionKey: string
 }
 
+type DrawDownDisplayInfo = {
+  id: number
+  label: string
+  bounds: { x: number; y: number; width: number; height: number }
+  workArea: { x: number; y: number; width: number; height: number }
+  scaleFactor: number
+  primary: boolean
+}
+
+type DrawDownStageDisplayStatus = {
+  available: boolean
+  bounds: { x: number; y: number; width: number; height: number } | null
+  isFullScreen: boolean
+  isMaximized: boolean
+  displayId: number | null
+  displayLabel: string | null
+  resolution: string | null
+  onPrimary: boolean | null
+  displays: DrawDownDisplayInfo[]
+  suggestedProjectorId: number | null
+}
+
 interface Window {
   drawDown?: {
     platform: NodeJS.Platform
@@ -27,6 +49,19 @@ interface Window {
     uninstall?: () => Promise<DrawDownUninstallResult>
     showOperatorWindow?: () => Promise<{ ok: boolean }>
     focusStageWindow?: () => Promise<{ ok: boolean }>
+    getStageDisplayStatus?: () => Promise<DrawDownStageDisplayStatus>
+    moveStageToDisplay?: (
+      displayId: number,
+      opts?: { fullscreen?: boolean },
+    ) => Promise<{ ok: boolean; reason?: string; status?: DrawDownStageDisplayStatus }>
+    moveStageToProjector?: () => Promise<{
+      ok: boolean
+      reason?: string
+      status?: DrawDownStageDisplayStatus
+    }>
+    setStageFullscreen?: (
+      fullscreen: boolean,
+    ) => Promise<{ ok: boolean; reason?: string; status?: DrawDownStageDisplayStatus }>
     auditSave?: (blob: unknown) => Promise<{ ok: boolean; path?: string; reason?: string }>
     auditLoad?: (eventId: string) => Promise<{ ok: boolean; blob: unknown | null }>
     bridgePublish?: (message: unknown) => void

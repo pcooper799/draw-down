@@ -124,6 +124,12 @@ function useCommandRunner(
         case 'pause':
           s.pause()
           break
+        case 'emergencyStop':
+          s.emergencyStop()
+          break
+        case 'confirmSafeResume':
+          if (liveOk) s.confirmSafeResume()
+          break
         case 'reset':
           // Post-start reset requires name/reason via the operator dialog — ignore bridge.
           if (liveOk && !s.drawHasStarted) s.resetSession()
@@ -284,9 +290,19 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
       if (event.key === ' ' || event.code === 'Space') {
         if (event.repeat) return
         event.preventDefault()
-        if (status === 'running') pause()
-        else if (status === 'paused' || status === 'idle' || status === 'finished') {
-          if (remaining > config.stopAt) start()
+        if (status === 'running') {
+          session.emergencyStop()
+          return
+        }
+        if (status === 'paused' || status === 'idle' || status === 'finished') {
+          if (remaining > config.stopAt) {
+            if (session.safePaused) {
+              // Operator panel owns the confirm dialog; nudge via notice.
+              session.start()
+              return
+            }
+            start()
+          }
         }
       }
     }
@@ -333,6 +349,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         license.refresh()
       }}
       onRequestActivation={() => setRenewOpen(true)}
+      licensed={license.licensed}
     />
   )
 
@@ -563,7 +580,7 @@ function StageMirrorApp() {
         if (event.repeat) return
         event.preventDefault()
         if (!view) return
-        if (view.status === 'running') sendBridgeCommand({ type: 'pause' })
+        if (view.status === 'running') sendBridgeCommand({ type: 'emergencyStop' })
         else if (view.remaining > view.config.stopAt) sendBridgeCommand({ type: 'start' })
       }
     }

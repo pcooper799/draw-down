@@ -28,6 +28,8 @@ export type BridgeViewState = {
 export type BridgeCommand =
   | { type: 'start' }
   | { type: 'pause' }
+  | { type: 'emergencyStop' }
+  | { type: 'confirmSafeResume' }
   | { type: 'reset' }
   | { type: 'save' }
   | { type: 'toggleHold'; ticket: number }

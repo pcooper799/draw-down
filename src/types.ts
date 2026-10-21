@@ -19,6 +19,11 @@ export type SessionConfig = {
   paceMs: number
   /** Board cell size multiplier (1 = default). Persists with session autosave. */
   ticketScale: number
+  /**
+   * Planned prize stop levels (remaining counts), highest first — e.g. [10, 5, 1].
+   * First entry is the initial stopAt when applying the setup wizard.
+   */
+  prizeTiers: number[]
   orgName: string
   brandImageDataUrl: string | null
 }
@@ -28,6 +33,7 @@ export const DEFAULT_CONFIG: SessionConfig = {
   stopAt: 1,
   paceMs: 2500,
   ticketScale: 1,
+  prizeTiers: [1],
   orgName: 'Your Organization',
   brandImageDataUrl: null,
 }

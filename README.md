@@ -48,10 +48,11 @@ Give the `DD2....` code to the customer after payment. Codes must be activated w
 
 ## Operator basics
 
-1. Open **Session setup** (gear) to set organization name, starting ticket count, stop-at remaining, and brand image.
+1. Open **Wizard** for guided event setup (organization, tickets, insurance, prize tiers, display, review + **Test Everything**). Use **Advanced** for activation/uninstall tools.
 2. Tickets start **yellow** (**No-Insurance**). Use **Insurance** only after a ticket buys it (turns green).
 3. **Right-click** a ticket on the board to hold it out (e.g. auction / higher sale), then right-click again later to bring it back into the draw. Held tickets are teal (dashed); drawn-out tickets stay red and cannot return.
-4. Set **Draw pace**, then **Start**. Pause and reset as needed during a live event.
+4. Check **Projector safety** (monitor, resolution, fullscreen, live preview) and **Move to Projector** before going live. Set **Draw pace**, then **Start**.
+   Use **Emergency Stop** for an instant safe pause (no reset); resume requires an explicit confirmation and is audited.
    On the desktop app, **Stage** and **Operator** open as separate windows (operator stays on top so it never covers the board). In the browser, use **Pop out** for the same split.
    In **projection** / fullscreen, use **Ticket size** in the operator panel (or `+` / `−` keys, or the on-stage size controls) so numbers stay readable on a big screen. Size persists with the session; the board scrolls if zoomed large.
 5. When the draw **stops at your stop number**, award the prize, set a **new (lower) stop** for the next prize, and continue — no reset required.

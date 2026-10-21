@@ -19,6 +19,28 @@ export type LocalDataInfo = {
   sessionKey: string
 }
 
+export type DisplayInfo = {
+  id: number
+  label: string
+  bounds: { x: number; y: number; width: number; height: number }
+  workArea: { x: number; y: number; width: number; height: number }
+  scaleFactor: number
+  primary: boolean
+}
+
+export type StageDisplayStatus = {
+  available: boolean
+  bounds: { x: number; y: number; width: number; height: number } | null
+  isFullScreen: boolean
+  isMaximized: boolean
+  displayId: number | null
+  displayLabel: string | null
+  resolution: string | null
+  onPrimary: boolean | null
+  displays: DisplayInfo[]
+  suggestedProjectorId: number | null
+}
+
 type BridgeHandler = (message: unknown) => void
 
 contextBridge.exposeInMainWorld('drawDown', {
@@ -28,6 +50,19 @@ contextBridge.exposeInMainWorld('drawDown', {
   uninstall: (): Promise<UninstallResult> => ipcRenderer.invoke('draw-down:uninstall'),
   showOperatorWindow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('draw-down:show-operator'),
   focusStageWindow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('draw-down:focus-stage'),
+  getStageDisplayStatus: (): Promise<StageDisplayStatus> =>
+    ipcRenderer.invoke('draw-down:get-stage-display-status'),
+  moveStageToDisplay: (
+    displayId: number,
+    opts?: { fullscreen?: boolean },
+  ): Promise<{ ok: boolean; reason?: string; status?: StageDisplayStatus }> =>
+    ipcRenderer.invoke('draw-down:move-stage-to-display', displayId, opts),
+  moveStageToProjector: (): Promise<{ ok: boolean; reason?: string; status?: StageDisplayStatus }> =>
+    ipcRenderer.invoke('draw-down:move-stage-to-projector'),
+  setStageFullscreen: (
+    fullscreen: boolean,
+  ): Promise<{ ok: boolean; reason?: string; status?: StageDisplayStatus }> =>
+    ipcRenderer.invoke('draw-down:set-stage-fullscreen', fullscreen),
   auditSave: (blob: unknown): Promise<{ ok: boolean; path?: string; reason?: string }> =>
     ipcRenderer.invoke('draw-down:audit-save', blob),
   auditLoad: (

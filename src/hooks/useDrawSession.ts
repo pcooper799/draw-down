@@ -14,6 +14,7 @@ import {
   clampTicketScale,
   clampTotalTickets,
   MAX_TICKETS,
+  normalizePrizeTiers,
   normalizeTicketList,
   pruneInsuranceMarks,
 } from '@/lib/drawRules'
@@ -75,6 +76,7 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
     stopAt,
     paceMs: clampPaceMs(snapshot.config.paceMs),
     ticketScale: clampTicketScale(snapshot.config.ticketScale ?? 1),
+    prizeTiers: normalizePrizeTiers(snapshot.config.prizeTiers ?? [stopAt], total),
   }
   const eliminated = snapshot.eliminated.filter((n) => n >= 1 && n <= total)
   const heldOut = normalizeTicketList(snapshot.heldOut ?? [], total, eliminated)
@@ -178,6 +180,8 @@ export function useDrawSession() {
   const [pool, setPool] = useState<Ticket[]>(() => initial.pool)
   const [eliminated, setEliminated] = useState<number[]>(() => initial.eliminated)
   const [heldOut, setHeldOut] = useState<number[]>(() => initial.heldOut)
+  const [safePaused, setSafePaused] = useState(false)
+  const safePausedRef = useRef(false)
   const [history, setHistory] = useState<DrawEvent[]>(() => initial.history)
   const [status, setStatus] = useState<DrawStatus>(initial.status)
   const [lastDrawn, setLastDrawn] = useState<DrawEvent | null>(initial.lastDrawn)
@@ -221,6 +225,9 @@ export function useDrawSession() {
   useEffect(() => {
     heldOutRef.current = heldOut
   }, [heldOut])
+  useEffect(() => {
+    safePausedRef.current = safePaused
+  }, [safePaused])
   useEffect(() => {
     historyRef.current = history
   }, [history])
@@ -282,6 +289,10 @@ export function useDrawSession() {
         merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
         merged.paceMs = clampPaceMs(merged.paceMs)
         merged.ticketScale = clampTicketScale(merged.ticketScale)
+        merged.prizeTiers = normalizePrizeTiers(
+          merged.prizeTiers ?? [merged.stopAt],
+          merged.totalTickets,
+        )
         if (!merged.orgName?.trim()) merged.orgName = prev.orgName
         configRef.current = merged
         return merged
@@ -626,6 +637,8 @@ export function useDrawSession() {
       }
 
       if (statusRef.current === 'running') clearTimer()
+      safePausedRef.current = false
+      setSafePaused(false)
 
       const previousEventId = auditRef.current.eventId
       auditRef.current.append({
@@ -979,10 +992,14 @@ export function useDrawSession() {
 
   const start = useCallback(() => {
     if (statusRef.current === 'running' || drawLockRef.current) return
+    if (safePausedRef.current) {
+      setSaveNotice('Emergency stop is active — confirm Resume in the dialog')
+      return false
+    }
     if (poolRef.current.length <= configRef.current.stopAt) {
       statusRef.current = 'finished'
       setStatus('finished')
-      return
+      return false
     }
 
     const wasPaused = statusRef.current === 'paused' || statusRef.current === 'finished'
@@ -1012,36 +1029,69 @@ export function useDrawSession() {
         drawLockRef.current = false
       }
     })()
+    return true
   }, [drawOnce, scheduleNext, syncAuditUi])
 
-  const pause = useCallback(() => {
-    clearTimer()
-    drawLockRef.current = false
-    if (statusRef.current === 'running') {
-      statusRef.current = 'paused'
-      setStatus('paused')
+  const pause = useCallback(
+    (note = 'Manual pause') => {
+      clearTimer()
+      drawLockRef.current = false
+      if (statusRef.current === 'running') {
+        statusRef.current = 'paused'
+        setStatus('paused')
+        auditRef.current.append({
+          type: 'pause',
+          note,
+          eligibleBefore: poolRef.current.length,
+          eligibleAfter: poolRef.current.length,
+          stopAt: configRef.current.stopAt,
+        })
+        void persistAudit(auditRef.current).then(syncAuditUi)
+        writeAutosave(
+          toSnapshot({
+            config: configRef.current,
+            insuranceMarks: insuranceRef.current,
+            eliminated: eliminatedRef.current,
+            heldOut: heldOutRef.current,
+            history: historyRef.current,
+            lastDrawn: lastDrawnRef.current,
+            status: 'paused',
+            eventId: auditRef.current.eventId,
+          }),
+        )
+        return true
+      }
+      return false
+    },
+    [clearTimer, syncAuditUi],
+  )
+
+  /** Instant safe pause — does not reset pool/insurance/history. Resume needs confirm. */
+  const emergencyStop = useCallback(() => {
+    const wasRunning = statusRef.current === 'running'
+    pause('Emergency stop / safe pause')
+    safePausedRef.current = true
+    setSafePaused(true)
+    if (!wasRunning && statusRef.current === 'paused') {
       auditRef.current.append({
         type: 'pause',
-        note: 'Manual pause',
+        note: 'Emergency stop armed (draw already paused)',
         eligibleBefore: poolRef.current.length,
         eligibleAfter: poolRef.current.length,
         stopAt: configRef.current.stopAt,
+        details: { emergency: true },
       })
       void persistAudit(auditRef.current).then(syncAuditUi)
-      writeAutosave(
-        toSnapshot({
-          config: configRef.current,
-          insuranceMarks: insuranceRef.current,
-          eliminated: eliminatedRef.current,
-          heldOut: heldOutRef.current,
-          history: historyRef.current,
-          lastDrawn: lastDrawnRef.current,
-          status: 'paused',
-          eventId: auditRef.current.eventId,
-        }),
-      )
     }
-  }, [clearTimer, syncAuditUi])
+    setSaveNotice('EMERGENCY STOP — draw held; confirm to resume')
+  }, [pause, syncAuditUi])
+
+  /** Clear the emergency latch and resume drawing (after operator confirms). */
+  const confirmSafeResume = useCallback(() => {
+    safePausedRef.current = false
+    setSafePaused(false)
+    return start()
+  }, [start])
 
   const revealAuditSeed = useCallback(async () => {
     try {
@@ -1099,6 +1149,9 @@ export function useDrawSession() {
     maxTickets: MAX_TICKETS,
     start,
     pause,
+    emergencyStop,
+    safePaused,
+    confirmSafeResume,
     resetSession,
     drawHasStarted,
     continueWithNewStop,

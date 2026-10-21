@@ -3,6 +3,7 @@ import {
   clampStopAt,
   clampTicketScale,
   clampTotalTickets,
+  normalizePrizeTiers,
   normalizeTicketList,
   pruneInsuranceMarks,
 } from '@/lib/drawRules'
@@ -93,6 +94,10 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
     paceMs: clampPaceMs(Number(data.config.paceMs) || DEFAULT_CONFIG.paceMs),
     ticketScale: clampTicketScale(
       Number(data.config.ticketScale) || DEFAULT_CONFIG.ticketScale,
+    ),
+    prizeTiers: normalizePrizeTiers(
+      Array.isArray(data.config.prizeTiers) ? data.config.prizeTiers : [stopAt],
+      totalTickets,
     ),
     orgName: String(data.config.orgName || DEFAULT_CONFIG.orgName),
     brandImageDataUrl:

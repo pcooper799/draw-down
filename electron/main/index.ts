@@ -207,6 +207,104 @@ function focusStageWindow() {
   return true
 }
 
+function listDisplays() {
+  const primaryId = screen.getPrimaryDisplay().id
+  return screen.getAllDisplays().map((d) => ({
+    id: d.id,
+    label: d.label || `Display ${d.id}`,
+    bounds: d.bounds,
+    workArea: d.workArea,
+    scaleFactor: d.scaleFactor,
+    primary: d.id === primaryId,
+  }))
+}
+
+function displayForBounds(bounds: Electron.Rectangle) {
+  const cx = bounds.x + Math.floor(bounds.width / 2)
+  const cy = bounds.y + Math.floor(bounds.height / 2)
+  return screen.getDisplayNearestPoint({ x: cx, y: cy })
+}
+
+function suggestedProjectorId(displays: ReturnType<typeof listDisplays>) {
+  const external = displays.filter((d) => !d.primary)
+  const pool = external.length > 0 ? external : displays
+  let best = pool[0] ?? null
+  for (const d of pool) {
+    const area = d.bounds.width * d.bounds.height
+    const bestArea = best ? best.bounds.width * best.bounds.height : 0
+    if (!best || area > bestArea) best = d
+  }
+  return best?.id ?? null
+}
+
+function getStageDisplayStatus() {
+  const displays = listDisplays()
+  if (!stageWin || stageWin.isDestroyed()) {
+    return {
+      available: false,
+      bounds: null,
+      isFullScreen: false,
+      isMaximized: false,
+      displayId: null,
+      displayLabel: null,
+      resolution: null,
+      onPrimary: null,
+      displays,
+      suggestedProjectorId: suggestedProjectorId(displays),
+    }
+  }
+  const bounds = stageWin.getBounds()
+  const display = displayForBounds(bounds)
+  const primaryId = screen.getPrimaryDisplay().id
+  return {
+    available: true,
+    bounds,
+    isFullScreen: stageWin.isFullScreen(),
+    isMaximized: stageWin.isMaximized(),
+    displayId: display.id,
+    displayLabel: display.label || `Display ${display.id}`,
+    resolution: `${bounds.width}×${bounds.height}`,
+    onPrimary: display.id === primaryId,
+    displays,
+    suggestedProjectorId: suggestedProjectorId(displays),
+  }
+}
+
+function moveStageToDisplay(displayId: number, opts?: { fullscreen?: boolean }) {
+  if (!stageWin || stageWin.isDestroyed()) return { ok: false as const, reason: 'Stage window is not open' }
+  const target = screen.getAllDisplays().find((d) => d.id === displayId)
+  if (!target) return { ok: false as const, reason: 'Display not found' }
+
+  const wantFs = opts?.fullscreen !== false
+  if (stageWin.isFullScreen()) stageWin.setFullScreen(false)
+
+  const wa = target.workArea
+  const width = Math.min(1400, Math.max(900, wa.width - 80))
+  const height = Math.min(900, Math.max(600, wa.height - 80))
+  stageWin.setBounds({
+    x: wa.x + Math.floor((wa.width - width) / 2),
+    y: wa.y + Math.floor((wa.height - height) / 2),
+    width,
+    height,
+  })
+  stageWin.show()
+  stageWin.focus()
+  if (wantFs) {
+    // Defer so the OS applies bounds on the target display first.
+    setTimeout(() => {
+      if (stageWin && !stageWin.isDestroyed()) stageWin.setFullScreen(true)
+    }, 80)
+  }
+  return { ok: true as const, status: getStageDisplayStatus() }
+}
+
+function setStageFullscreen(fullscreen: boolean) {
+  if (!stageWin || stageWin.isDestroyed()) return { ok: false as const, reason: 'Stage window is not open' }
+  stageWin.setFullScreen(fullscreen)
+  stageWin.show()
+  return { ok: true as const, status: getStageDisplayStatus() }
+}
+
 function buildAppMenu() {
   const canUninstall = Boolean(findUninstaller())
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -285,6 +383,21 @@ ipcMain.handle('draw-down:show-operator', async () => {
   return { ok: true }
 })
 ipcMain.handle('draw-down:focus-stage', () => ({ ok: focusStageWindow() }))
+ipcMain.handle('draw-down:get-stage-display-status', () => getStageDisplayStatus())
+ipcMain.handle(
+  'draw-down:move-stage-to-display',
+  (_event, displayId: number, opts?: { fullscreen?: boolean }) =>
+    moveStageToDisplay(Number(displayId), opts),
+)
+ipcMain.handle('draw-down:move-stage-to-projector', () => {
+  const status = getStageDisplayStatus()
+  const id = status.suggestedProjectorId
+  if (id == null) return { ok: false as const, reason: 'No display available' }
+  return moveStageToDisplay(id, { fullscreen: true })
+})
+ipcMain.handle('draw-down:set-stage-fullscreen', (_event, fullscreen: boolean) =>
+  setStageFullscreen(Boolean(fullscreen)),
+)
 ipcMain.handle('draw-down:audit-save', async (_event, blob: { package: { eventId: string } }) => {
   try {
     await ensureAuditsDir()
