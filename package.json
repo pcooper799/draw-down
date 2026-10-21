@@ -1,6 +1,6 @@
 {
   "name": "draw-down",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "Windows desktop event app for ticket draw-downs with insurance.",
   "author": {
@@ -21,6 +21,7 @@
     "license:keys": "node scripts/generate-license-keys.mjs",
     "license:issue": "node scripts/issue-license.mjs",
     "test:gameplay": "node scripts/gameplay-invariants.mjs",
+    "test:audit": "node scripts/audit-invariants.mjs",
     "release:repo": "node scripts/set-release-repo.mjs",
     "preview": "vite preview --port 43127 --host 127.0.0.1"
   },

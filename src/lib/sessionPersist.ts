@@ -23,6 +23,8 @@ export type SessionSnapshot = {
   lastDrawn: DrawEvent | null
   /** Running sessions restore as paused so the operator can resume safely. */
   status: Exclude<DrawStatus, 'running'>
+  /** Links this session to the offline audit package. */
+  eventId?: string
 }
 
 export type LiveSessionSlice = {
@@ -33,6 +35,7 @@ export type LiveSessionSlice = {
   history: DrawEvent[]
   lastDrawn: DrawEvent | null
   status: DrawStatus
+  eventId?: string
 }
 
 export function buildPoolFromSnapshot(
@@ -66,6 +69,7 @@ export function toSnapshot(live: LiveSessionSlice): SessionSnapshot {
     history: live.history.slice(0, 50),
     lastDrawn: live.lastDrawn,
     status,
+    eventId: live.eventId,
   }
 }
 
@@ -136,6 +140,7 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
     history: Array.isArray(data.history) ? (data.history as DrawEvent[]) : [],
     lastDrawn: data.lastDrawn ?? null,
     status,
+    eventId: typeof data.eventId === 'string' ? data.eventId : undefined,
   }
 }
 

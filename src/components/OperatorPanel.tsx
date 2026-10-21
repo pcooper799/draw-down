@@ -12,6 +12,7 @@ import {
   Download,
   Trash2,
 } from 'lucide-react'
+import { AuditPanel } from '@/components/AuditPanel'
 import { InsuranceManager } from '@/components/InsuranceManager'
 import { Button } from '@/components/ui/button'
 import {
@@ -555,6 +556,10 @@ export function OperatorPanel({
               : ''}
           </p>
           <InsuranceManager session={session} locked={drawLocked || controlsLocked} />
+        </section>
+
+        <section className="operator-section">
+          <AuditPanel session={session} locked={controlsLocked} />
         </section>
 
         <section className="operator-section space-y-2">

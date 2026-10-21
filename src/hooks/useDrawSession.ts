@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AuditEngine,
+  flushAuditDurable,
+  readLocalAudit,
+  validateEligiblePool,
+  writeLocalAudit,
+  type AuditEntry,
+} from '@/lib/audit'
+import {
   canInsureTicket,
   clampPaceMs,
   clampStopAt,
@@ -33,6 +41,30 @@ function buildPool(total: number, insured: Set<number>): Ticket[] {
   })
 }
 
+function createAudit(config: SessionConfig, eventId?: string) {
+  const existing = eventId ? readLocalAudit(eventId) : null
+  if (existing?.package) {
+    return AuditEngine.fromLocalPersist(existing)
+  }
+  const engine = new AuditEngine({
+    eventName: config.orgName,
+    startingTickets: config.totalTickets,
+  })
+  engine.append({
+    type: 'event_created',
+    note: 'Draw event created',
+    details: {
+      startingTickets: config.totalTickets,
+      stopAt: config.stopAt,
+      paceMs: config.paceMs,
+    },
+    eligibleBefore: config.totalTickets,
+    eligibleAfter: config.totalTickets,
+  })
+  writeLocalAudit(engine)
+  return engine
+}
+
 function hydrateFromSnapshot(snapshot: SessionSnapshot) {
   const total = clampTotalTickets(snapshot.config.totalTickets, snapshot.config.stopAt)
   const stopAt = clampStopAt(snapshot.config.stopAt, total)
@@ -45,6 +77,7 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
   const eliminated = snapshot.eliminated.filter((n) => n >= 1 && n <= total)
   const heldOut = normalizeTicketList(snapshot.heldOut ?? [], total, eliminated)
   const marks = pruneInsuranceMarks(snapshot.insuranceMarks, total, eliminated)
+  const audit = createAudit(config, snapshot.eventId)
   return {
     config,
     insuranceMarks: marks,
@@ -54,22 +87,31 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
     history: snapshot.history,
     lastDrawn: snapshot.lastDrawn,
     status: snapshot.status as DrawStatus,
+    audit,
   }
+}
+
+async function persistAudit(engine: AuditEngine) {
+  const blob = writeLocalAudit(engine)
+  await flushAuditDurable(blob)
 }
 
 export function useDrawSession() {
   const initial = useMemo(() => {
     const saved = typeof window !== 'undefined' ? readAutosave() : null
     if (saved) return { ...hydrateFromSnapshot(saved), restoredAt: saved.savedAt }
+    const config = DEFAULT_CONFIG
+    const audit = createAudit(config)
     return {
-      config: DEFAULT_CONFIG,
+      config,
       insuranceMarks: new Set<number>(),
-      pool: buildPool(DEFAULT_CONFIG.totalTickets, new Set()),
+      pool: buildPool(config.totalTickets, new Set()),
       eliminated: [] as number[],
       heldOut: [] as number[],
       history: [] as DrawEvent[],
       lastDrawn: null as DrawEvent | null,
       status: 'idle' as DrawStatus,
+      audit,
       restoredAt: null as string | null,
     }
   }, [])
@@ -87,6 +129,11 @@ export function useDrawSession() {
   const [saveNotice, setSaveNotice] = useState<string | null>(
     initial.restoredAt ? 'Restored previous session' : null,
   )
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(() => [...initial.audit.entries])
+  const [seedCommitment, setSeedCommitment] = useState<string | null>(
+    () => initial.audit.seed.commitment || null,
+  )
+  const [seedRevealed, setSeedRevealed] = useState(() => initial.audit.seed.revealed)
 
   const timerRef = useRef<number | null>(null)
   const poolRef = useRef(pool)
@@ -97,8 +144,8 @@ export function useDrawSession() {
   const heldOutRef = useRef(heldOut)
   const historyRef = useRef(history)
   const lastDrawnRef = useRef(lastDrawn)
+  const auditRef = useRef(initial.audit)
   const readyToAutosave = useRef(false)
-  /** Prevents overlapping start()/draw scheduling from key repeat or double-clicks. */
   const drawLockRef = useRef(false)
 
   useEffect(() => {
@@ -146,12 +193,33 @@ export function useDrawSession() {
     }
   }, [])
 
+  const syncAuditUi = useCallback(() => {
+    setAuditEntries([...auditRef.current.entries])
+    setSeedCommitment(auditRef.current.seed.commitment || null)
+    setSeedRevealed(auditRef.current.seed.revealed)
+  }, [])
+
   const remaining = pool.length
   const insuredRemaining = useMemo(() => pool.filter((t) => t.insured).length, [pool])
   const digits = String(Math.max(config.totalTickets, 1)).length
 
+  const captureSnapshot = useCallback((): SessionSnapshot => {
+    return toSnapshot({
+      config: configRef.current,
+      insuranceMarks: insuranceRef.current,
+      eliminated: eliminatedRef.current,
+      heldOut: heldOutRef.current,
+      history: historyRef.current,
+      lastDrawn: lastDrawnRef.current,
+      status: statusRef.current,
+      eventId: auditRef.current.eventId,
+    })
+  }, [])
+
   const applyConfig = useCallback(
     (next: Partial<SessionConfig>) => {
+      let prevStop = configRef.current.stopAt
+      let prevName = configRef.current.orgName
       setConfig((prev) => {
         const merged = { ...prev, ...next }
         merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
@@ -165,7 +233,20 @@ export function useDrawSession() {
 
       const rem = poolRef.current.length
       const stop = configRef.current.stopAt
-      // Prize tiers: lower stop-at after a stop so the draw can continue.
+      if (configRef.current.orgName !== prevName) {
+        auditRef.current.setEventName(configRef.current.orgName)
+      }
+      if (stop !== prevStop) {
+        auditRef.current.append({
+          type: 'stop_at_changed',
+          stopAt: stop,
+          eligibleBefore: rem,
+          eligibleAfter: rem,
+          details: { prevStopAt: prevStop, nextStopAt: stop },
+        })
+        void persistAudit(auditRef.current).then(syncAuditUi)
+      }
+
       if (statusRef.current === 'finished' && rem > stop) {
         statusRef.current = 'paused'
         setStatus('paused')
@@ -180,10 +261,9 @@ export function useDrawSession() {
         setStatus('finished')
       }
     },
-    [clearTimer],
+    [clearTimer, syncAuditUi],
   )
 
-  /** Set a new stop-at (e.g. next prize) and reopen a finished draw when possible. */
   const continueWithNewStop = useCallback(
     (stopAt: number) => {
       if (statusRef.current === 'running') return false
@@ -194,9 +274,17 @@ export function useDrawSession() {
         return false
       }
       applyConfig({ stopAt: nextStop })
+      auditRef.current.append({
+        type: 'continue',
+        stopAt: nextStop,
+        eligibleBefore: rem,
+        eligibleAfter: rem,
+        note: 'Operator continued after stop with new threshold',
+      })
+      void persistAudit(auditRef.current).then(syncAuditUi)
       return true
     },
-    [applyConfig],
+    [applyConfig, syncAuditUi],
   )
 
   const syncInsuranceIntoPool = useCallback((marks: Set<number>) => {
@@ -222,6 +310,8 @@ export function useDrawSession() {
         setSaveNotice('That ticket is already out — cannot insure it')
         return
       }
+      const inPool = poolRef.current.some((t) => t.number === ticket)
+      const wasHeld = heldOutRef.current.includes(ticket)
       setInsuranceMarks((prev) => {
         const next = new Set(prev)
         if (insured) next.add(ticket)
@@ -235,8 +325,17 @@ export function useDrawSession() {
         syncInsuranceIntoPool(pruned)
         return pruned
       })
+      auditRef.current.append({
+        type: insured ? 'insurance_marked' : 'insurance_cleared',
+        ticket,
+        prevState: wasHeld ? 'held' : inPool ? (insured ? 'active' : 'insured') : 'eliminated',
+        nextState: wasHeld ? 'held' : insured ? 'insured' : 'active',
+        eligibleBefore: poolRef.current.length,
+        eligibleAfter: poolRef.current.length,
+      })
+      void persistAudit(auditRef.current).then(syncAuditUi)
     },
-    [syncInsuranceIntoPool],
+    [syncInsuranceIntoPool, syncAuditUi],
   )
 
   const clearAllInsurance = useCallback(() => {
@@ -245,7 +344,14 @@ export function useDrawSession() {
     insuranceRef.current = empty
     setInsuranceMarks(empty)
     syncInsuranceIntoPool(empty)
-  }, [syncInsuranceIntoPool])
+    auditRef.current.append({
+      type: 'insurance_cleared',
+      note: 'Cleared all insurance marks',
+      eligibleBefore: poolRef.current.length,
+      eligibleAfter: poolRef.current.length,
+    })
+    void persistAudit(auditRef.current).then(syncAuditUi)
+  }, [syncInsuranceIntoPool, syncAuditUi])
 
   const rebuildPool = useCallback(
     (total: number, marks: Set<number> = insuranceRef.current) => {
@@ -268,69 +374,123 @@ export function useDrawSession() {
       setLastDrawn(null)
       setStatus('idle')
       setInsuranceMarks(pruned)
+
+      const engine = new AuditEngine({
+        eventName: configRef.current.orgName,
+        startingTickets: safeTotal,
+      })
+      engine.append({
+        type: 'event_created',
+        note: 'New draw pool',
+        details: { startingTickets: safeTotal, stopAt: configRef.current.stopAt },
+        eligibleBefore: safeTotal,
+        eligibleAfter: safeTotal,
+      })
+      auditRef.current = engine
+      void persistAudit(engine).then(syncAuditUi)
     },
-    [clearTimer],
+    [clearTimer, syncAuditUi],
   )
 
-  const toggleTicketHold = useCallback((ticket: number) => {
-    const total = configRef.current.totalTickets
-    if (!Number.isFinite(ticket)) return
-    const n = Math.floor(ticket)
-    if (n < 1 || n > total) return
-    if (eliminatedRef.current.includes(n)) {
-      setSaveNotice(`#${n} was drawn out — cannot bring back`)
-      return
-    }
+  const toggleTicketHold = useCallback(
+    (ticket: number) => {
+      const total = configRef.current.totalTickets
+      if (!Number.isFinite(ticket)) return
+      const n = Math.floor(ticket)
+      if (n < 1 || n > total) return
+      if (eliminatedRef.current.includes(n)) {
+        setSaveNotice(`#${n} was drawn out — cannot bring back`)
+        return
+      }
 
-    const isHeld = heldOutRef.current.includes(n)
-    if (isHeld) {
-      // Bring back into the draw (keeps insurance mark if still set)
-      const nextHeld = heldOutRef.current.filter((x) => x !== n)
-      heldOutRef.current = nextHeld
-      setHeldOut(nextHeld)
-      const insured = insuranceRef.current.has(n)
-      const nextPool = [...poolRef.current, { number: n, insured }].sort(
-        (a, b) => a.number - b.number,
-      )
-      poolRef.current = nextPool
-      setPool(nextPool)
-      if (statusRef.current === 'finished' && nextPool.length > configRef.current.stopAt) {
+      const eligibleBefore = poolRef.current.length
+      const isHeld = heldOutRef.current.includes(n)
+      if (isHeld) {
+        const nextHeld = heldOutRef.current.filter((x) => x !== n)
+        heldOutRef.current = nextHeld
+        setHeldOut(nextHeld)
+        const insured = insuranceRef.current.has(n)
+        const nextPool = [...poolRef.current, { number: n, insured }].sort(
+          (a, b) => a.number - b.number,
+        )
+        poolRef.current = nextPool
+        setPool(nextPool)
+        if (statusRef.current === 'finished' && nextPool.length > configRef.current.stopAt) {
+          statusRef.current = 'paused'
+          setStatus('paused')
+        }
+        auditRef.current.append({
+          type: 'release',
+          ticket: n,
+          prevState: 'held',
+          nextState: insured ? 'insured' : 'active',
+          eligibleBefore,
+          eligibleAfter: nextPool.length,
+          auctionPrice: null,
+          note: 'Held ticket released into draw',
+        })
+        void persistAudit(auditRef.current).then(syncAuditUi)
+        setSaveNotice(`#${n} back in the draw`)
+        return
+      }
+
+      if (!poolRef.current.some((t) => t.number === n)) {
+        setSaveNotice(`#${n} is not in the draw`)
+        return
+      }
+
+      if (statusRef.current === 'running') {
+        clearTimer()
+        drawLockRef.current = false
         statusRef.current = 'paused'
         setStatus('paused')
+        auditRef.current.append({
+          type: 'pause',
+          note: 'Auto-paused to hold ticket',
+          eligibleBefore,
+          eligibleAfter: eligibleBefore,
+        })
       }
-      setSaveNotice(`#${n} back in the draw`)
-      return
-    }
 
-    // Hold out of the pool for auction / higher sale
-    if (!poolRef.current.some((t) => t.number === n)) {
-      setSaveNotice(`#${n} is not in the draw`)
-      return
-    }
+      const wasInsured = poolRef.current.find((t) => t.number === n)?.insured ?? false
+      const nextPool = poolRef.current.filter((t) => t.number !== n)
+      poolRef.current = nextPool
+      setPool(nextPool)
+      const nextHeld = [n, ...heldOutRef.current.filter((x) => x !== n)]
+      heldOutRef.current = nextHeld
+      setHeldOut(nextHeld)
 
-    if (statusRef.current === 'running') {
-      clearTimer()
-      drawLockRef.current = false
-      statusRef.current = 'paused'
-      setStatus('paused')
-    }
+      auditRef.current.append({
+        type: 'hold',
+        ticket: n,
+        prevState: wasInsured ? 'insured' : 'active',
+        nextState: 'held',
+        eligibleBefore,
+        eligibleAfter: nextPool.length,
+        auctionPrice: null,
+        note: 'Ticket held out of draw (auction/other)',
+      })
 
-    const nextPool = poolRef.current.filter((t) => t.number !== n)
-    poolRef.current = nextPool
-    setPool(nextPool)
-    const nextHeld = [n, ...heldOutRef.current.filter((x) => x !== n)]
-    heldOutRef.current = nextHeld
-    setHeldOut(nextHeld)
+      if (nextPool.length <= configRef.current.stopAt) {
+        statusRef.current = 'finished'
+        setStatus('finished')
+        clearTimer()
+        drawLockRef.current = false
+        auditRef.current.append({
+          type: 'stop_reached',
+          stopAt: configRef.current.stopAt,
+          ticket: n,
+          eligibleBefore: nextPool.length,
+          eligibleAfter: nextPool.length,
+          note: 'Stop reached after hold',
+        })
+      }
 
-    if (nextPool.length <= configRef.current.stopAt) {
-      statusRef.current = 'finished'
-      setStatus('finished')
-      clearTimer()
-      drawLockRef.current = false
-    }
-
-    setSaveNotice(`#${n} held out — right-click to bring back`)
-  }, [clearTimer])
+      void persistAudit(auditRef.current).then(syncAuditUi)
+      setSaveNotice(`#${n} held out — right-click to bring back`)
+    },
+    [clearTimer, syncAuditUi],
+  )
 
   const commitTotalTickets = useCallback(
     (total: number) => {
@@ -338,7 +498,6 @@ export function useDrawSession() {
       const stopAt = configRef.current.stopAt
       const safe = clampTotalTickets(total, stopAt)
       applyConfig({ totalTickets: safe })
-      // New pool size = fresh board: all yellow until insurance is marked.
       const empty = new Set<number>()
       insuranceRef.current = empty
       setInsuranceMarks(empty)
@@ -348,28 +507,19 @@ export function useDrawSession() {
   )
 
   const resetSession = useCallback(() => {
-    if (statusRef.current === 'running') {
-      clearTimer()
-    }
-    // Reset clears insurance so every ticket comes back in yellow.
+    if (statusRef.current === 'running') clearTimer()
+    auditRef.current.append({
+      type: 'reset',
+      note: 'Operator reset session — new event id follows',
+      eligibleBefore: poolRef.current.length,
+    })
+    void persistAudit(auditRef.current)
     const empty = new Set<number>()
     insuranceRef.current = empty
     setInsuranceMarks(empty)
     rebuildPool(configRef.current.totalTickets, empty)
     setSaveNotice('Session reset — all tickets yellow')
   }, [rebuildPool, clearTimer])
-
-  const captureSnapshot = useCallback((): SessionSnapshot => {
-    return toSnapshot({
-      config: configRef.current,
-      insuranceMarks: insuranceRef.current,
-      eliminated: eliminatedRef.current,
-      heldOut: heldOutRef.current,
-      history: historyRef.current,
-      lastDrawn: lastDrawnRef.current,
-      status: statusRef.current,
-    })
-  }, [])
 
   const applySnapshot = useCallback(
     (snapshot: SessionSnapshot, notice: string) => {
@@ -384,6 +534,7 @@ export function useDrawSession() {
       historyRef.current = hydrated.history
       lastDrawnRef.current = hydrated.lastDrawn
       statusRef.current = hydrated.status
+      auditRef.current = hydrated.audit
       setConfig(hydrated.config)
       setInsuranceMarks(hydrated.insuranceMarks)
       setPool(hydrated.pool)
@@ -393,6 +544,7 @@ export function useDrawSession() {
       setLastDrawn(hydrated.lastDrawn)
       setStatus(hydrated.status)
       setLastSavedAt(snapshot.savedAt)
+      syncAuditUi()
       writeAutosave(
         toSnapshot({
           config: hydrated.config,
@@ -402,16 +554,18 @@ export function useDrawSession() {
           history: hydrated.history,
           lastDrawn: hydrated.lastDrawn,
           status: hydrated.status,
+          eventId: hydrated.audit.eventId,
         }),
       )
       setSaveNotice(notice)
     },
-    [clearTimer],
+    [clearTimer, syncAuditUi],
   )
 
   const saveNow = useCallback(() => {
     const snapshot = captureSnapshot()
     writeAutosave(snapshot)
+    void persistAudit(auditRef.current)
     setLastSavedAt(snapshot.savedAt)
     setSaveNotice('Session saved')
     return snapshot
@@ -447,7 +601,6 @@ export function useDrawSession() {
     setSaveNotice('Cleared autosave')
   }, [])
 
-  // Debounced autosave whenever live state changes
   useEffect(() => {
     if (!readyToAutosave.current) return
     const id = window.setTimeout(() => {
@@ -465,13 +618,14 @@ export function useDrawSession() {
     lastDrawn,
     status,
     pool,
+    auditEntries,
     captureSnapshot,
   ])
 
-  // Persist immediately if the window is closing / refreshing mid-event
   useEffect(() => {
     const flush = () => {
       writeAutosave(captureSnapshot())
+      writeLocalAudit(auditRef.current)
     }
     window.addEventListener('beforeunload', flush)
     window.addEventListener('pagehide', flush)
@@ -481,7 +635,7 @@ export function useDrawSession() {
     }
   }, [captureSnapshot])
 
-  const drawOnce = useCallback(() => {
+  const drawOnce = useCallback(async () => {
     const currentPool = poolRef.current
     const cfg = configRef.current
     if (currentPool.length === 0 || currentPool.length <= cfg.stopAt) {
@@ -492,66 +646,153 @@ export function useDrawSession() {
       return
     }
 
-    const index = Math.floor(Math.random() * currentPool.length)
-    const ticket = currentPool[index]
-    if (!ticket) {
+    const validation = validateEligiblePool({
+      totalTickets: cfg.totalTickets,
+      pool: currentPool,
+      eliminated: eliminatedRef.current,
+      heldOut: heldOutRef.current,
+    })
+    if (!validation.ok) {
       clearTimer()
+      drawLockRef.current = false
+      statusRef.current = 'paused'
+      setStatus('paused')
+      auditRef.current.append({
+        type: 'integrity_halt',
+        note: validation.reason,
+        eligibleBefore: currentPool.length,
+        eligibleAfter: currentPool.length,
+      })
+      await persistAudit(auditRef.current)
+      syncAuditUi()
+      setSaveNotice(`Draw halted — ${validation.reason}`)
       return
     }
 
-    const event: DrawEvent = {
-      id: `${Date.now()}-${ticket.number}-${Math.random().toString(36).slice(2, 7)}`,
-      ticket: ticket.number,
-      insured: ticket.insured,
-      outcome: ticket.insured ? 'returned' : 'eliminated',
-      at: Date.now(),
-    }
+    try {
+      auditRef.current.ensureSeed()
+      if (!auditRef.current.seed.commitment) {
+        auditRef.current.commitSeed()
+      }
+      const pick = auditRef.current.pickUnbiasedIndex(validation.eligibleSorted)
+      const ticket = currentPool.find((t) => t.number === pick.ticket)
+      if (!ticket) {
+        throw new Error(`Selected ticket ${pick.ticket} missing from pool`)
+      }
 
-    lastDrawnRef.current = event
-    setLastDrawn(event)
-    setFlashKey((k) => k + 1)
-    setHistory((h) => {
-      const next = [event, ...h].slice(0, 50)
-      historyRef.current = next
-      return next
-    })
+      const eligibleBefore = currentPool.length
+      const selectionNumber = auditRef.current.nextSelectionNumber()
+      const insuranceConsumed = ticket.insured
+      const permanentlyEliminated = !ticket.insured
 
-    if (ticket.insured) {
-      setInsuranceMarks((prev) => {
-        const next = new Set(prev)
-        next.delete(ticket.number)
-        insuranceRef.current = next
+      let nextPool: Ticket[]
+      if (ticket.insured) {
+        nextPool = currentPool.map((t) =>
+          t.number === ticket.number ? { ...t, insured: false } : t,
+        )
+      } else {
+        nextPool = currentPool.filter((t) => t.number !== ticket.number)
+      }
+
+      auditRef.current.append({
+        type: 'draw_selection',
+        selectionNumber,
+        ticket: ticket.number,
+        prevState: ticket.insured ? 'insured' : 'active',
+        nextState: permanentlyEliminated ? 'eliminated' : 'active',
+        insuranceConsumed,
+        permanentlyEliminated,
+        eligibleBefore,
+        eligibleAfter: nextPool.length,
+        stopAt: cfg.stopAt,
+        rng: pick.rng,
+      })
+
+      // Durable commit BEFORE UI mutation
+      await persistAudit(auditRef.current)
+      syncAuditUi()
+      setSeedCommitment(auditRef.current.seed.commitment)
+
+      const event: DrawEvent = {
+        id: `${Date.now()}-${ticket.number}-${selectionNumber}`,
+        ticket: ticket.number,
+        insured: ticket.insured,
+        outcome: ticket.insured ? 'returned' : 'eliminated',
+        at: Date.now(),
+      }
+
+      lastDrawnRef.current = event
+      setLastDrawn(event)
+      setFlashKey((k) => k + 1)
+      setHistory((h) => {
+        const next = [event, ...h].slice(0, 50)
+        historyRef.current = next
         return next
       })
-      const nextPool = currentPool.map((t) =>
-        t.number === ticket.number ? { ...t, insured: false } : t,
-      )
-      poolRef.current = nextPool
-      setPool(nextPool)
-    } else {
-      const nextPool = currentPool.filter((t) => t.number !== ticket.number)
-      poolRef.current = nextPool
-      setPool(nextPool)
-      setEliminated((prev) => {
-        const next = [ticket.number, ...prev]
-        eliminatedRef.current = next
-        // Drop any stale insurance mark for tickets that are now out
-        if (insuranceRef.current.has(ticket.number)) {
-          const marks = new Set(insuranceRef.current)
-          marks.delete(ticket.number)
-          insuranceRef.current = marks
-          setInsuranceMarks(marks)
-        }
-        return next
-      })
+
+      if (ticket.insured) {
+        setInsuranceMarks((prev) => {
+          const next = new Set(prev)
+          next.delete(ticket.number)
+          insuranceRef.current = next
+          return next
+        })
+        poolRef.current = nextPool
+        setPool(nextPool)
+      } else {
+        poolRef.current = nextPool
+        setPool(nextPool)
+        setEliminated((prev) => {
+          const next = [ticket.number, ...prev]
+          eliminatedRef.current = next
+          if (insuranceRef.current.has(ticket.number)) {
+            const marks = new Set(insuranceRef.current)
+            marks.delete(ticket.number)
+            insuranceRef.current = marks
+            setInsuranceMarks(marks)
+          }
+          return next
+        })
+      }
+
       if (nextPool.length <= cfg.stopAt) {
         statusRef.current = 'finished'
         setStatus('finished')
         clearTimer()
         drawLockRef.current = false
+        auditRef.current.append({
+          type: 'stop_reached',
+          ticket: ticket.number,
+          stopAt: cfg.stopAt,
+          eligibleBefore: nextPool.length,
+          eligibleAfter: nextPool.length,
+          note: 'Automatic stopping point reached',
+          details: {
+            displayedTicket: ticket.number,
+            remaining: nextPool.length,
+            threshold: cfg.stopAt,
+          },
+        })
+        await persistAudit(auditRef.current)
+        syncAuditUi()
       }
+    } catch (error) {
+      clearTimer()
+      drawLockRef.current = false
+      statusRef.current = 'paused'
+      setStatus('paused')
+      const message = error instanceof Error ? error.message : 'Unknown draw error'
+      auditRef.current.append({
+        type: 'integrity_halt',
+        note: message,
+        eligibleBefore: currentPool.length,
+        eligibleAfter: currentPool.length,
+      })
+      await persistAudit(auditRef.current)
+      syncAuditUi()
+      setSaveNotice(`Draw halted — ${message}`)
     }
-  }, [clearTimer])
+  }, [clearTimer, syncAuditUi])
 
   const scheduleNext = useCallback(() => {
     clearTimer()
@@ -565,12 +806,14 @@ export function useDrawSession() {
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null
       if (statusRef.current !== 'running') return
-      drawOnce()
-      if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
-        scheduleNext()
-      } else {
-        drawLockRef.current = false
-      }
+      void (async () => {
+        await drawOnce()
+        if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
+          scheduleNext()
+        } else {
+          drawLockRef.current = false
+        }
+      })()
     }, configRef.current.paceMs)
   }, [clearTimer, drawOnce])
 
@@ -581,16 +824,35 @@ export function useDrawSession() {
       setStatus('finished')
       return
     }
+
+    const wasPaused = statusRef.current === 'paused' || statusRef.current === 'finished'
+    auditRef.current.ensureSeed()
+    if (!auditRef.current.seed.commitment) {
+      auditRef.current.commitSeed()
+    }
+    setSeedCommitment(auditRef.current.seed.commitment)
+    auditRef.current.append({
+      type: wasPaused ? 'resume' : 'start',
+      note: wasPaused ? 'Drawing resumed' : 'Drawing started',
+      eligibleBefore: poolRef.current.length,
+      eligibleAfter: poolRef.current.length,
+      stopAt: configRef.current.stopAt,
+      seedCommitment: auditRef.current.seed.commitment,
+    })
+    void persistAudit(auditRef.current).then(syncAuditUi)
+
     drawLockRef.current = true
     statusRef.current = 'running'
     setStatus('running')
-    drawOnce()
-    if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
-      scheduleNext()
-    } else {
-      drawLockRef.current = false
-    }
-  }, [drawOnce, scheduleNext])
+    void (async () => {
+      await drawOnce()
+      if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
+        scheduleNext()
+      } else {
+        drawLockRef.current = false
+      }
+    })()
+  }, [drawOnce, scheduleNext, syncAuditUi])
 
   const pause = useCallback(() => {
     clearTimer()
@@ -598,7 +860,14 @@ export function useDrawSession() {
     if (statusRef.current === 'running') {
       statusRef.current = 'paused'
       setStatus('paused')
-      // Flush save so a crash after pause is recoverable
+      auditRef.current.append({
+        type: 'pause',
+        note: 'Manual pause',
+        eligibleBefore: poolRef.current.length,
+        eligibleAfter: poolRef.current.length,
+        stopAt: configRef.current.stopAt,
+      })
+      void persistAudit(auditRef.current).then(syncAuditUi)
       writeAutosave(
         toSnapshot({
           config: configRef.current,
@@ -608,21 +877,36 @@ export function useDrawSession() {
           history: historyRef.current,
           lastDrawn: lastDrawnRef.current,
           status: 'paused',
+          eventId: auditRef.current.eventId,
         }),
       )
     }
-  }, [clearTimer])
+  }, [clearTimer, syncAuditUi])
 
-  // Live pace edits while drawing: reschedule with the new interval (no double timers)
+  const revealAuditSeed = useCallback(async () => {
+    try {
+      const hex = auditRef.current.revealSeed()
+      await persistAudit(auditRef.current)
+      syncAuditUi()
+      setSaveNotice('Audit seed revealed for verification')
+      return hex
+    } catch (error) {
+      setSaveNotice(error instanceof Error ? error.message : 'Could not reveal seed')
+      return null
+    }
+  }, [syncAuditUi])
+
+  const exportAuditPackage = useCallback(() => {
+    return auditRef.current.toPackage()
+  }, [])
+
   useEffect(() => {
     if (statusRef.current === 'running') {
       scheduleNext()
     }
-    // Only re-run when pace changes — not when scheduleNext identity changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.paceMs])
 
-  // Auto-pause if the window/tab is hidden — browsers throttle timers and skip draws
   useEffect(() => {
     const onVisibility = () => {
       if (document.hidden && statusRef.current === 'running') {
@@ -667,6 +951,14 @@ export function useDrawSession() {
     discardAutosave,
     lastSavedAt,
     saveNotice,
+    // Audit / verification
+    eventId: auditRef.current.eventId,
+    auditEntries,
+    seedCommitment,
+    seedRevealed,
+    revealAuditSeed,
+    exportAuditPackage,
+    getAuditEngine: () => auditRef.current,
   }
 }
 

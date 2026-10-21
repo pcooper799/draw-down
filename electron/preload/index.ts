@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('drawDown', {
   uninstall: (): Promise<UninstallResult> => ipcRenderer.invoke('draw-down:uninstall'),
   showOperatorWindow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('draw-down:show-operator'),
   focusStageWindow: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('draw-down:focus-stage'),
+  auditSave: (blob: unknown): Promise<{ ok: boolean; path?: string; reason?: string }> =>
+    ipcRenderer.invoke('draw-down:audit-save', blob),
+  auditLoad: (
+    eventId: string,
+  ): Promise<{ ok: boolean; blob: unknown | null }> =>
+    ipcRenderer.invoke('draw-down:audit-load', eventId),
   bridgePublish: (message: unknown) => {
     ipcRenderer.send('draw-down:bridge', message)
   },

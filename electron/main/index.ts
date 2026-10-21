@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, Menu, screen, shell } from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import fsp from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -263,6 +264,14 @@ function buildAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
+function auditsDir() {
+  return path.join(app.getPath('userData'), 'audits')
+}
+
+async function ensureAuditsDir() {
+  await fsp.mkdir(auditsDir(), { recursive: true })
+}
+
 ipcMain.handle('draw-down:get-install-info', () => getInstallInfo())
 ipcMain.handle('draw-down:uninstall', () => launchUninstaller())
 ipcMain.handle('draw-down:show-operator', async () => {
@@ -270,6 +279,30 @@ ipcMain.handle('draw-down:show-operator', async () => {
   return { ok: true }
 })
 ipcMain.handle('draw-down:focus-stage', () => ({ ok: focusStageWindow() }))
+ipcMain.handle('draw-down:audit-save', async (_event, blob: { package: { eventId: string } }) => {
+  try {
+    await ensureAuditsDir()
+    const id = String(blob?.package?.eventId || '').replace(/[^\w.-]/g, '_')
+    if (!id) return { ok: false, reason: 'missing eventId' }
+    const file = path.join(auditsDir(), `${id}.json`)
+    const tmp = `${file}.tmp`
+    await fsp.writeFile(tmp, JSON.stringify(blob), 'utf8')
+    await fsp.rename(tmp, file)
+    return { ok: true, path: file }
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : 'audit save failed' }
+  }
+})
+ipcMain.handle('draw-down:audit-load', async (_event, eventId: string) => {
+  try {
+    const id = String(eventId || '').replace(/[^\w.-]/g, '_')
+    const file = path.join(auditsDir(), `${id}.json`)
+    const text = await fsp.readFile(file, 'utf8')
+    return { ok: true, blob: JSON.parse(text) }
+  } catch {
+    return { ok: false, blob: null }
+  }
+})
 ipcMain.on('draw-down:bridge', (event, message) => {
   broadcastBridge(message, event.sender)
 })
