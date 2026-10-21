@@ -9,6 +9,8 @@ export default defineConfig(() => {
   rmSync('dist-electron', { recursive: true, force: true })
 
   return {
+    // Relative asset URLs so packaged Electron loadFile (file://) resolves icons/JS/CSS.
+    base: './',
     resolve: {
       alias: {
         '@': path.join(__dirname, 'src'),

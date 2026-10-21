@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { activateLicenseCode, formatRemaining, type LicenseStatus } from '@/lib/license'
+/** Bundled via Vite so Electron file:// builds get a relative asset URL (not /app-icon.png). */
+import appIconUrl from '@/assets/app-icon.png'
 
 type Props = {
   status: LicenseStatus
@@ -54,7 +56,7 @@ export function ActivationScreen({
       )}
 
       <div className="mx-auto mb-5 h-32 w-32 overflow-hidden border border-red-500/35 bg-black shadow-[0_0_40px_rgba(220,40,40,0.25)]">
-        <img src="/app-icon.png" alt="Draw Down" className="h-full w-full object-cover" />
+        <img src={appIconUrl} alt="Draw Down" className="h-full w-full object-cover" />
       </div>
 
       <div className="text-center">
