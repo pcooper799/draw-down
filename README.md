@@ -21,6 +21,7 @@ npm run electron:dev
 1. Open **Session setup** (gear) to set organization name, starting ticket count, stop-at remaining, and brand image.
 2. Use **Insurance** to mark each ticket number that bought insurance.
 3. Set **Draw pace**, then **Start**. Pause and reset as needed during a live event.
+4. Sessions **autosave** locally. Use **Save** / **Ctrl+S**, **Export** a JSON file, or **Load** to pick up later if something goes wrong.
 
 ### Defaults
 

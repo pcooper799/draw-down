@@ -49,7 +49,7 @@ export function TicketBoard({
         <Legend />
       </div>
 
-      <div className="ticket-board-scroll min-h-0 flex-1 overflow-auto border border-[var(--line)] bg-[rgba(8,12,10,0.55)] p-2 backdrop-blur-sm sm:p-3">
+      <div className="ticket-board-scroll min-h-0 flex-1 overflow-auto p-2.5 sm:p-3.5">
         <div
           className="ticket-board-grid"
           style={{ ['--ticket-min' as string]: minCell }}

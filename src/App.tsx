@@ -19,7 +19,7 @@ function isTypingTarget(target: EventTarget | null) {
 export default function App() {
   const session = useDrawSession()
   const [projectionMode, setProjectionMode] = useState(false)
-  const { status, start, pause, remaining, config } = session
+  const { status, start, pause, remaining, config, saveNow } = session
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -45,6 +45,13 @@ export default function App() {
         return
       }
 
+      // Manual save
+      if ((event.key === 's' || event.key === 'S') && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        saveNow()
+        return
+      }
+
       // Space: pause / resume while projecting (also handy with controls visible)
       if (event.key === ' ' || event.code === 'Space') {
         event.preventDefault()
@@ -60,7 +67,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [projectionMode, status, start, pause, remaining, config.stopAt])
+  }, [projectionMode, status, start, pause, remaining, config.stopAt, saveNow])
 
   return (
     <div className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--stage)] text-[var(--ink)] lg:flex-row">

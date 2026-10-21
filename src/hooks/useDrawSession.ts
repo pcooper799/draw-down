@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  buildPoolFromSnapshot,
+  clearAutosave,
+  downloadSnapshotFile,
+  readAutosave,
+  readSnapshotFromFile,
+  toSnapshot,
+  writeAutosave,
+  type SessionSnapshot,
+} from '@/lib/sessionPersist'
+import {
   DEFAULT_CONFIG,
   type DrawEvent,
   type DrawStatus,
@@ -14,21 +24,57 @@ function buildPool(total: number, insured: Set<number>): Ticket[] {
   })
 }
 
+function hydrateFromSnapshot(snapshot: SessionSnapshot) {
+  const marks = new Set(snapshot.insuranceMarks)
+  return {
+    config: snapshot.config,
+    insuranceMarks: marks,
+    pool: buildPoolFromSnapshot(snapshot.config.totalTickets, snapshot.eliminated, marks),
+    eliminated: snapshot.eliminated,
+    history: snapshot.history,
+    lastDrawn: snapshot.lastDrawn,
+    status: snapshot.status as DrawStatus,
+  }
+}
+
 export function useDrawSession() {
-  const [config, setConfig] = useState<SessionConfig>(DEFAULT_CONFIG)
-  const [insuranceMarks, setInsuranceMarks] = useState<Set<number>>(() => new Set())
-  const [pool, setPool] = useState<Ticket[]>(() => buildPool(DEFAULT_CONFIG.totalTickets, new Set()))
-  const [eliminated, setEliminated] = useState<number[]>([])
-  const [history, setHistory] = useState<DrawEvent[]>([])
-  const [status, setStatus] = useState<DrawStatus>('idle')
-  const [lastDrawn, setLastDrawn] = useState<DrawEvent | null>(null)
+  const initial = useMemo(() => {
+    const saved = typeof window !== 'undefined' ? readAutosave() : null
+    if (saved) return { ...hydrateFromSnapshot(saved), restoredAt: saved.savedAt }
+    return {
+      config: DEFAULT_CONFIG,
+      insuranceMarks: new Set<number>(),
+      pool: buildPool(DEFAULT_CONFIG.totalTickets, new Set()),
+      eliminated: [] as number[],
+      history: [] as DrawEvent[],
+      lastDrawn: null as DrawEvent | null,
+      status: 'idle' as DrawStatus,
+      restoredAt: null as string | null,
+    }
+  }, [])
+
+  const [config, setConfig] = useState<SessionConfig>(initial.config)
+  const [insuranceMarks, setInsuranceMarks] = useState<Set<number>>(() => initial.insuranceMarks)
+  const [pool, setPool] = useState<Ticket[]>(() => initial.pool)
+  const [eliminated, setEliminated] = useState<number[]>(() => initial.eliminated)
+  const [history, setHistory] = useState<DrawEvent[]>(() => initial.history)
+  const [status, setStatus] = useState<DrawStatus>(initial.status)
+  const [lastDrawn, setLastDrawn] = useState<DrawEvent | null>(initial.lastDrawn)
   const [flashKey, setFlashKey] = useState(0)
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(initial.restoredAt)
+  const [saveNotice, setSaveNotice] = useState<string | null>(
+    initial.restoredAt ? 'Restored previous session' : null,
+  )
 
   const timerRef = useRef<number | null>(null)
   const poolRef = useRef(pool)
   const statusRef = useRef(status)
   const configRef = useRef(config)
   const insuranceRef = useRef(insuranceMarks)
+  const eliminatedRef = useRef(eliminated)
+  const historyRef = useRef(history)
+  const lastDrawnRef = useRef(lastDrawn)
+  const readyToAutosave = useRef(false)
 
   useEffect(() => {
     poolRef.current = pool
@@ -42,6 +88,28 @@ export function useDrawSession() {
   useEffect(() => {
     insuranceRef.current = insuranceMarks
   }, [insuranceMarks])
+  useEffect(() => {
+    eliminatedRef.current = eliminated
+  }, [eliminated])
+  useEffect(() => {
+    historyRef.current = history
+  }, [history])
+  useEffect(() => {
+    lastDrawnRef.current = lastDrawn
+  }, [lastDrawn])
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      readyToAutosave.current = true
+    }, 400)
+    return () => window.clearTimeout(id)
+  }, [])
+
+  useEffect(() => {
+    if (!saveNotice) return
+    const id = window.setTimeout(() => setSaveNotice(null), 4000)
+    return () => window.clearTimeout(id)
+  }, [saveNotice])
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -107,7 +175,6 @@ export function useDrawSession() {
       const stopAt = configRef.current.stopAt
       const safe = Math.max(stopAt, Math.max(1, total))
       applyConfig({ totalTickets: safe })
-      // Drop insurance marks beyond new total
       setInsuranceMarks((prev) => {
         const next = new Set([...prev].filter((n) => n <= safe))
         rebuildPool(safe, next)
@@ -120,6 +187,91 @@ export function useDrawSession() {
   const resetSession = useCallback(() => {
     rebuildPool(configRef.current.totalTickets, insuranceRef.current)
   }, [rebuildPool])
+
+  const captureSnapshot = useCallback((): SessionSnapshot => {
+    return toSnapshot({
+      config: configRef.current,
+      insuranceMarks: insuranceRef.current,
+      eliminated: eliminatedRef.current,
+      history: historyRef.current,
+      lastDrawn: lastDrawnRef.current,
+      status: statusRef.current,
+    })
+  }, [])
+
+  const applySnapshot = useCallback(
+    (snapshot: SessionSnapshot, notice: string) => {
+      clearTimer()
+      const hydrated = hydrateFromSnapshot(snapshot)
+      setConfig(hydrated.config)
+      setInsuranceMarks(hydrated.insuranceMarks)
+      insuranceRef.current = hydrated.insuranceMarks
+      setPool(hydrated.pool)
+      poolRef.current = hydrated.pool
+      setEliminated(hydrated.eliminated)
+      setHistory(hydrated.history)
+      setLastDrawn(hydrated.lastDrawn)
+      setStatus(hydrated.status)
+      statusRef.current = hydrated.status
+      setLastSavedAt(snapshot.savedAt)
+      writeAutosave(snapshot)
+      setSaveNotice(notice)
+    },
+    [clearTimer],
+  )
+
+  const saveNow = useCallback(() => {
+    const snapshot = captureSnapshot()
+    writeAutosave(snapshot)
+    setLastSavedAt(snapshot.savedAt)
+    setSaveNotice('Session saved')
+    return snapshot
+  }, [captureSnapshot])
+
+  const exportSaveFile = useCallback(() => {
+    const snapshot = saveNow()
+    downloadSnapshotFile(snapshot)
+    setSaveNotice('Save file downloaded')
+  }, [saveNow])
+
+  const loadSaveFile = useCallback(
+    async (file: File) => {
+      const snapshot = await readSnapshotFromFile(file)
+      if (!snapshot) {
+        setSaveNotice('Could not read that save file')
+        return false
+      }
+      applySnapshot(snapshot, 'Loaded save file')
+      return true
+    },
+    [applySnapshot],
+  )
+
+  const discardAutosave = useCallback(() => {
+    clearAutosave()
+    setLastSavedAt(null)
+    setSaveNotice('Cleared autosave')
+  }, [])
+
+  // Debounced autosave whenever live state changes
+  useEffect(() => {
+    if (!readyToAutosave.current) return
+    const id = window.setTimeout(() => {
+      const snapshot = captureSnapshot()
+      writeAutosave(snapshot)
+      setLastSavedAt(snapshot.savedAt)
+    }, 500)
+    return () => window.clearTimeout(id)
+  }, [
+    config,
+    insuranceMarks,
+    eliminated,
+    history,
+    lastDrawn,
+    status,
+    pool,
+    captureSnapshot,
+  ])
 
   const drawOnce = useCallback(() => {
     const currentPool = poolRef.current
@@ -146,7 +298,6 @@ export function useDrawSession() {
     setHistory((h) => [event, ...h].slice(0, 50))
 
     if (ticket.insured) {
-      // One-time insurance: return to the pool as a regular (uninsured) ticket.
       setInsuranceMarks((prev) => {
         const next = new Set(prev)
         next.delete(ticket.number)
@@ -202,7 +353,7 @@ export function useDrawSession() {
 
   useEffect(() => {
     if (status === 'running') scheduleNext()
-  }, [config.paceMs]) // eslint-disable-line react-hooks/exhaustive-deps -- only reschedule on pace change
+  }, [config.paceMs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => clearTimer(), [clearTimer])
 
@@ -227,6 +378,12 @@ export function useDrawSession() {
     setTicketInsured,
     clearAllInsurance,
     drawOnce,
+    saveNow,
+    exportSaveFile,
+    loadSaveFile,
+    discardAutosave,
+    lastSavedAt,
+    saveNotice,
   }
 }
 
