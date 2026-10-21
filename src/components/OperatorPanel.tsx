@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ImagePlus, Pause, Play, RotateCcw, Settings2 } from 'lucide-react'
+import { ImagePlus, MonitorPlay, Pause, Play, RotateCcw, Settings2 } from 'lucide-react'
 import { InsuranceManager } from '@/components/InsuranceManager'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,9 +18,10 @@ import type { DrawSession } from '@/hooks/useDrawSession'
 
 type Props = {
   session: DrawSession
+  onEnterProjection: () => void
 }
 
-export function OperatorPanel({ session }: Props) {
+export function OperatorPanel({ session, onEnterProjection }: Props) {
   const {
     config,
     applyConfig,
@@ -107,6 +108,19 @@ export function OperatorPanel({ session }: Props) {
           </p>
           <p className="font-display text-lg tracking-wide text-[var(--ink)]">Controls</p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            className="gap-2"
+            onClick={onEnterProjection}
+            title="Hide controls for projection (P)"
+            aria-label="Enter projection mode"
+          >
+            <MonitorPlay />
+            Project
+          </Button>
         <Dialog
           open={settingsOpen}
           onOpenChange={(open) => {
@@ -203,6 +217,7 @@ export function OperatorPanel({ session }: Props) {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="flex-1 space-y-6 overflow-y-auto px-4 py-4">
