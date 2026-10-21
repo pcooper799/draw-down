@@ -50,7 +50,19 @@ export function downloadAuditJson(pkg: AuditPackage, filename?: string) {
   URL.revokeObjectURL(url)
 }
 
-export function downloadAuditCsv(pkg: AuditPackage) {
+/** Metadata header so the offline Audit Verifier can cross-check event identity. */
+export const AUDIT_CSV_FORMAT = 'draw-down-audit-csv-v1'
+
+export function auditPackageToCsv(pkg: AuditPackage): string {
+  const meta = [
+    `# ${AUDIT_CSV_FORMAT}`,
+    `# eventId=${pkg.eventId}`,
+    `# eventName=${String(pkg.eventName).replace(/\n/g, ' ')}`,
+    `# startingTickets=${pkg.startingTickets}`,
+    `# seedCommitment=${pkg.seed?.commitment || ''}`,
+    `# seedRevealed=${pkg.seed?.revealed ? 'true' : 'false'}`,
+    `# entryCount=${pkg.entries.length}`,
+  ]
   const header = [
     'seq',
     'at',
@@ -85,7 +97,11 @@ export function downloadAuditCsv(pkg: AuditPackage) {
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
       .join(','),
   )
-  const csv = [header.join(','), ...rows].join('\n')
+  return [...meta, header.join(','), ...rows].join('\n')
+}
+
+export function downloadAuditCsv(pkg: AuditPackage) {
+  const csv = auditPackageToCsv(pkg)
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

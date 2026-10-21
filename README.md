@@ -55,6 +55,7 @@ Give the `DD2....` code to the customer after payment. Codes must be activated w
 6. Sessions **autosave** locally. Use **Save** / **Ctrl+S**, **Export** a JSON file, or **Load** to pick up later if something goes wrong.
 7. **Uninstall**: in the installed Windows app, open **Setup → Uninstall Draw Down** (or the app menu). That also clears activation data on this PC. If an older install left you still activated after uninstall, use **Setup → Clear activation on this PC**. Portable builds: delete the folder (and clear activation in Setup if needed).
 8. **Audit & verification** (operator window): every selection, hold/release, insurance change, pause/stop, and continue is logged in a tamper-evident chain. Export the seed **commitment** before the event if desired; **Reveal seed** after the event to enable independent replay. Use **Verify drawing**, JSON/CSV export, or Print/PDF report — all offline.
+9. **Audit Verifier** (separate organizer tool): load **both** JSON and CSV exports to re-check the hash chain and detect hand-edits that make the files disagree. `npm run audit:verify -- --json file.json --csv file.csv`, or unzip `tools/audit-verifier` / `Draw-Down-Audit-Verifier.zip` and open `Open-Audit-Verifier.bat`. Public-safe (no private keys) — unlike the Code Issuer.
 
 ### Defaults
 

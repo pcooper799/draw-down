@@ -23,9 +23,26 @@ Operator panel → **Audit & verification** → **Verify drawing** checks:
 - Ticket transition rules (no selecting eliminated/held tickets)
 
 ## Exports
-- **JSON** — full machine-readable package (`draw-down-audit-v1`)
-- **CSV** — spreadsheet-friendly log
+- **JSON** — full machine-readable package (`draw-down-audit-v1`) — authoritative for cryptography
+- **CSV** — spreadsheet-friendly log (`draw-down-audit-csv-v1` metadata header + entry rows). Must match the JSON entry view.
 - **Print / PDF** — concise organizer report (browser print dialog)
+
+## Separate Audit Verifier (organizer tool)
+
+A second offline program (not the stage app) cross-checks **both** exports:
+
+```bash
+npm run audit:verify -- --json path/to/audit.json --csv path/to/audit.csv
+```
+
+Portable pack (unzip → `Open-Audit-Verifier.bat`):
+
+- Repo: `tools/audit-verifier/`
+- Zip: `npm run pack:audit-verifier` → `release/tools/Draw-Down-Audit-Verifier.zip`
+
+**Safe for public GitHub Releases** (no private keys). Unlike the Code Issuer, this verifier may be published.
+
+Checks: hash chain, seed commitment/reveal + replay (when revealed), ticket transitions, CSV↔JSON field/hash agreement (detects hand-edits).
 
 ## Limits vs brief
 - Max tickets remain **2500** (app default); brief mentioned 1500.

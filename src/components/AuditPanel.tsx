@@ -50,7 +50,8 @@ export function AuditPanel({ session, locked = false }: Props) {
         <h3 className="font-display text-xl tracking-wide text-[var(--ink)]">Audit & verification</h3>
         <p className="mt-1 text-sm text-[var(--ink-muted)]">
           Offline tamper-evident log of selections, holds, insurance, and stops. Export before revealing
-          the seed if you want a public commitment record.
+          the seed if you want a public commitment record. To double-check JSON + CSV together on another
+          PC, use the separate <strong>Audit Verifier</strong> organizer tool (not the stage app).
         </p>
       </div>
 
