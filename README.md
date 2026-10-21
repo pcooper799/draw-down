@@ -49,7 +49,7 @@ Give the `DD2....` code to the customer after payment. Codes must be activated w
 ## Operator basics
 
 1. Open **Session setup** (gear) to set organization name, starting ticket count, stop-at remaining, and brand image.
-2. Tickets start **yellow** (in the draw). Use **Insurance** only after a ticket buys it (turns green).
+2. Tickets start **yellow** (**No-Insurance**). Use **Insurance** only after a ticket buys it (turns green).
 3. **Right-click** a ticket on the board to hold it out (e.g. auction / higher sale), then right-click again later to bring it back into the draw. Held tickets are teal (dashed); drawn-out tickets stay red and cannot return.
 4. Set **Draw pace**, then **Start**. Pause and reset as needed during a live event.
    On the desktop app, **Stage** and **Operator** open as separate windows (operator stays on top so it never covers the board). In the browser, use **Pop out** for the same split.

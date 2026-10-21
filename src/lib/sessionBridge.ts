@@ -43,7 +43,7 @@ export type BridgeCommand =
 
 type BridgeEnvelope =
   | { kind: 'state'; state: BridgeViewState }
-  | { kind: 'cmd'; cmd: BridgeCommand; from: string }
+  | { kind: 'cmd'; cmd: BridgeCommand; from: string; id?: string }
 
 type Listener = (msg: BridgeEnvelope) => void
 
@@ -62,6 +62,11 @@ function instanceId() {
 
 const selfId = typeof window !== 'undefined' ? instanceId() : 'ssr'
 
+/** Prefer Electron IPC when present so cmds are not double-delivered with BroadcastChannel. */
+function hasElectronBridge() {
+  return Boolean(window.drawDown?.bridgePublish && window.drawDown?.onBridgeMessage)
+}
+
 function postViaElectron(msg: BridgeEnvelope) {
   window.drawDown?.bridgePublish?.(msg)
 }
@@ -76,6 +81,18 @@ function postViaBroadcast(msg: BridgeEnvelope) {
   }
 }
 
+function postEnvelope(msg: BridgeEnvelope) {
+  if (hasElectronBridge()) {
+    postViaElectron(msg)
+    return
+  }
+  postViaBroadcast(msg)
+}
+
+function newCmdId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export function publishBridgeState(state: BridgeViewState) {
   try {
     localStorage.setItem(STORAGE_STATE_KEY, JSON.stringify(state))
@@ -83,14 +100,12 @@ export function publishBridgeState(state: BridgeViewState) {
     // quota
   }
   const envelope: BridgeEnvelope = { kind: 'state', state }
-  postViaBroadcast(envelope)
-  postViaElectron(envelope)
+  postEnvelope(envelope)
 }
 
 export function sendBridgeCommand(cmd: BridgeCommand) {
-  const envelope: BridgeEnvelope = { kind: 'cmd', cmd, from: selfId }
-  postViaBroadcast(envelope)
-  postViaElectron(envelope)
+  const envelope: BridgeEnvelope = { kind: 'cmd', cmd, from: selfId, id: newCmdId() }
+  postEnvelope(envelope)
 }
 
 export function readCachedBridgeState(): BridgeViewState | null {
@@ -106,35 +121,55 @@ export function readCachedBridgeState(): BridgeViewState | null {
 }
 
 export function subscribeBridge(listener: Listener) {
+  const recentCmdIds = new Map<string, number>()
+  const DEDUPE_MS = 1500
+
+  const deliver = (msg: BridgeEnvelope) => {
+    if (msg.kind === 'cmd') {
+      if (msg.from === selfId) return
+      if (msg.id) {
+        const now = Date.now()
+        for (const [id, at] of recentCmdIds) {
+          if (now - at > DEDUPE_MS) recentCmdIds.delete(id)
+        }
+        if (recentCmdIds.has(msg.id)) return
+        recentCmdIds.set(msg.id, now)
+      }
+    }
+    listener(msg)
+  }
+
   const onStorage = (event: StorageEvent) => {
     if (event.key !== STORAGE_STATE_KEY || !event.newValue) return
     try {
       const state = JSON.parse(event.newValue) as BridgeViewState
-      if (state?.v === 1) listener({ kind: 'state', state })
+      if (state?.v === 1) deliver({ kind: 'state', state })
     } catch {
       // ignore
     }
   }
 
   let channel: BroadcastChannel | null = null
-  try {
-    channel = new BroadcastChannel(CHANNEL)
-    channel.onmessage = (event) => {
-      const msg = event.data as BridgeEnvelope
-      if (!msg || (msg.kind !== 'state' && msg.kind !== 'cmd')) return
-      if (msg.kind === 'cmd' && msg.from === selfId) return
-      listener(msg)
-    }
-  } catch {
-    channel = null
-  }
+  let unsubElectron: (() => void) | undefined
 
-  const unsubElectron = window.drawDown?.onBridgeMessage?.((msg) => {
-    const envelope = msg as BridgeEnvelope
-    if (!envelope || (envelope.kind !== 'state' && envelope.kind !== 'cmd')) return
-    if (envelope.kind === 'cmd' && envelope.from === selfId) return
-    listener(envelope)
-  })
+  if (hasElectronBridge()) {
+    unsubElectron = window.drawDown?.onBridgeMessage?.((msg) => {
+      const envelope = msg as BridgeEnvelope
+      if (!envelope || (envelope.kind !== 'state' && envelope.kind !== 'cmd')) return
+      deliver(envelope)
+    })
+  } else {
+    try {
+      channel = new BroadcastChannel(CHANNEL)
+      channel.onmessage = (event) => {
+        const msg = event.data as BridgeEnvelope
+        if (!msg || (msg.kind !== 'state' && msg.kind !== 'cmd')) return
+        deliver(msg)
+      }
+    } catch {
+      channel = null
+    }
+  }
 
   window.addEventListener('storage', onStorage)
 

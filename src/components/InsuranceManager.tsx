@@ -62,7 +62,7 @@ export function InsuranceManager({ session, locked }: Props) {
         <div>
           <h3 className="font-display text-xl tracking-wide text-[var(--ink)]">Insurance</h3>
           <p className="mt-1 text-sm text-[var(--ink-muted)]">
-            Tickets start yellow (in draw). Mark insurance only after purchase — they turn green,
+            Tickets start yellow (No-Insurance). Mark insurance only after purchase — they turn green,
             return once as regular, then the next draw is out.
           </p>
         </div>

@@ -92,7 +92,7 @@ export function TicketBoard({
                   state === 'insured'
                     ? `#${n} insured · right-click to hold out`
                     : state === 'active'
-                      ? `#${n} in draw · right-click to hold out`
+                      ? `#${n} No-Insurance · right-click to hold out`
                       : state === 'held'
                         ? `#${n} held out (auction) · right-click to bring back`
                         : `#${n} eliminated`
@@ -118,7 +118,7 @@ function Legend() {
       </li>
       <li className="flex items-center gap-1.5 text-[var(--warn)]">
         <span className="legend-swatch legend-swatch--active" aria-hidden />
-        In draw
+        No-Insurance
       </li>
       <li className="flex items-center gap-1.5 text-[var(--held)]">
         <span className="legend-swatch legend-swatch--held" aria-hidden />
