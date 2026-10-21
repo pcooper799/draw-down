@@ -407,7 +407,15 @@ export function useDrawSession() {
   }, [syncInsuranceIntoPool, syncAuditUi])
 
   const rebuildPool = useCallback(
-    (total: number, marks: Set<number> = insuranceRef.current) => {
+    (
+      total: number,
+      marks: Set<number> = insuranceRef.current,
+      meta?: {
+        previousEventId?: string
+        resetBy?: string
+        resetReason?: string
+      },
+    ) => {
       clearTimer()
       drawLockRef.current = false
       const safeTotal = clampTotalTickets(total, configRef.current.stopAt)
@@ -434,10 +442,21 @@ export function useDrawSession() {
       })
       engine.append({
         type: 'event_created',
-        note: 'New draw pool',
-        details: { startingTickets: safeTotal, stopAt: configRef.current.stopAt },
+        note: meta?.previousEventId ? 'New draw pool after audited restart' : 'New draw pool',
+        details: {
+          startingTickets: safeTotal,
+          stopAt: configRef.current.stopAt,
+          ...(meta?.previousEventId
+            ? {
+                previousEventId: meta.previousEventId,
+                resetBy: meta.resetBy,
+                resetReason: meta.resetReason,
+              }
+            : {}),
+        },
         eligibleBefore: safeTotal,
         eligibleAfter: safeTotal,
+        operatorId: meta?.resetBy,
       })
       auditRef.current = engine
       void persistAudit(engine).then(syncAuditUi)
@@ -548,6 +567,17 @@ export function useDrawSession() {
   const commitTotalTickets = useCallback(
     (total: number) => {
       if (statusRef.current === 'running') return
+      // After Start, pool size changes must go through audited Reset — not silent rebuild.
+      const started =
+        statusRef.current === 'paused' ||
+        statusRef.current === 'finished' ||
+        historyRef.current.length > 0 ||
+        eliminatedRef.current.length > 0 ||
+        Boolean(auditRef.current.seed.commitment)
+      if (started) {
+        setSaveNotice('Draw already started — use Reset (name + reason) to change ticket count')
+        return
+      }
       const stopAt = configRef.current.stopAt
       const safe = clampTotalTickets(total, stopAt)
       applyConfig({ totalTickets: safe })
@@ -559,20 +589,82 @@ export function useDrawSession() {
     [applyConfig, rebuildPool],
   )
 
-  const resetSession = useCallback(() => {
-    if (statusRef.current === 'running') clearTimer()
-    auditRef.current.append({
-      type: 'reset',
-      note: 'Operator reset session — new event id follows',
-      eligibleBefore: poolRef.current.length,
-    })
-    void persistAudit(auditRef.current)
-    const empty = new Set<number>()
-    insuranceRef.current = empty
-    setInsuranceMarks(empty)
-    rebuildPool(configRef.current.totalTickets, empty)
-    setSaveNotice('Session reset — all tickets yellow')
-  }, [rebuildPool, clearTimer])
+  const drawHasStarted =
+    status === 'running' ||
+    status === 'paused' ||
+    status === 'finished' ||
+    history.length > 0 ||
+    eliminated.length > 0 ||
+    Boolean(seedCommitment)
+
+  /**
+   * Before first Start: free reset.
+   * After the draw has started: require operator name + reason; records on the
+   * current audit log, then opens a brand-new audit event for the next game.
+   */
+  const resetSession = useCallback(
+    (auth?: { operatorName: string; reason: string }) => {
+      const started =
+        statusRef.current === 'running' ||
+        statusRef.current === 'paused' ||
+        statusRef.current === 'finished' ||
+        historyRef.current.length > 0 ||
+        eliminatedRef.current.length > 0 ||
+        Boolean(auditRef.current.seed.commitment)
+
+      const operatorName = auth?.operatorName?.trim() ?? ''
+      const reason = auth?.reason?.trim() ?? ''
+
+      if (started && (!operatorName || !reason)) {
+        return false
+      }
+
+      if (statusRef.current === 'running') clearTimer()
+
+      const previousEventId = auditRef.current.eventId
+      auditRef.current.append({
+        type: 'reset',
+        operatorId: operatorName || 'local-operator',
+        note: started
+          ? `Restart authorized — ${reason}`
+          : 'Operator reset session before first draw — new event id follows',
+        eligibleBefore: poolRef.current.length,
+        eligibleAfter: configRef.current.totalTickets,
+        details: {
+          drawHadStarted: started,
+          operatorName: operatorName || null,
+          reason: reason || null,
+          previousEventId,
+          status: statusRef.current,
+          eliminatedCount: eliminatedRef.current.length,
+          historyCount: historyRef.current.length,
+          insuredCount: insuranceRef.current.size,
+          heldOutCount: heldOutRef.current.length,
+          remainingAtReset: poolRef.current.length,
+        },
+      })
+      // Persist the closed/prior event audit before switching to a new event id.
+      void persistAudit(auditRef.current)
+
+      const empty = new Set<number>()
+      insuranceRef.current = empty
+      setInsuranceMarks(empty)
+      rebuildPool(
+        configRef.current.totalTickets,
+        empty,
+        started
+          ? { previousEventId, resetBy: operatorName, resetReason: reason }
+          : undefined,
+      )
+      setSaveNotice(
+        started
+          ? `Restart recorded by ${operatorName} — new audit log started`
+          : 'Session reset — all tickets yellow',
+      )
+      return true
+    },
+    [rebuildPool, clearTimer],
+  )
 
   const applySnapshot = useCallback(
     (snapshot: SessionSnapshot, notice: string) => {
@@ -993,6 +1085,7 @@ export function useDrawSession() {
     start,
     pause,
     resetSession,
+    drawHasStarted,
     continueWithNewStop,
     setTicketInsured,
     clearAllInsurance,

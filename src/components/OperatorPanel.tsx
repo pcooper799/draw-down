@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { AuditPanel } from '@/components/AuditPanel'
 import { InsuranceManager } from '@/components/InsuranceManager'
+import { ResetConfirmDialog } from '@/components/ResetConfirmDialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -74,6 +75,7 @@ export function OperatorPanel({
     start,
     pause,
     resetSession,
+    drawHasStarted,
     continueWithNewStop,
     history,
     digits,
@@ -102,6 +104,7 @@ export function OperatorPanel({
   const [uninstallMessage, setUninstallMessage] = useState<string | null>(null)
   const [canUninstall, setCanUninstall] = useState(false)
   const [dataInfo, setDataInfo] = useState<DrawDownLocalDataInfo | null>(null)
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -356,6 +359,11 @@ export function OperatorPanel({
                     className="w-full"
                     disabled={controlsLocked}
                     onClick={() => {
+                      if (drawHasStarted) {
+                        setSettingsOpen(false)
+                        setResetDialogOpen(true)
+                        return
+                      }
                       discardAutosave()
                       resetSession()
                       setSettingsOpen(false)
@@ -363,6 +371,12 @@ export function OperatorPanel({
                   >
                     Clear saved session (all yellow)
                   </Button>
+                  {drawHasStarted && (
+                    <p className="text-xs text-[var(--ink-muted)]">
+                      Draw already started — clearing session requires your name and a reason
+                      (same as Reset).
+                    </p>
+                  )}
                   <p className="text-xs text-[var(--ink-faint)]">
                     Activation lasts 48 hours from when you entered the code. Updating or reinstalling
                     does not wipe it. Use Clear activation below, or Uninstall (new builds wipe app
@@ -534,15 +548,35 @@ export function OperatorPanel({
               type="button"
               variant="outline"
               size="lg"
-              onClick={resetSession}
-              disabled={drawLocked || controlsLocked}
-              aria-label="New event — all tickets yellow"
-              title="New event — clear board to all yellow"
+              onClick={() => {
+                if (drawHasStarted) {
+                  setResetDialogOpen(true)
+                  return
+                }
+                resetSession()
+              }}
+              disabled={controlsLocked}
+              aria-label={
+                drawHasStarted
+                  ? 'Restart draw — requires name and reason'
+                  : 'New event — all tickets yellow'
+              }
+              title={
+                drawHasStarted
+                  ? 'Restart requires name and reason (recorded in audit)'
+                  : 'New event — clear board to all yellow'
+              }
             >
               <RotateCcw />
             </Button>
           </div>
-          {insuredCount > 0 && status === 'idle' && !controlsLocked && (
+          {drawHasStarted && !controlsLocked && (
+            <p className="text-xs text-[var(--ink-muted)]">
+              Draw has started — Reset asks for your name and reason, closes this audit log, and
+              opens a new one.
+            </p>
+          )}
+          {insuredCount > 0 && status === 'idle' && !drawHasStarted && !controlsLocked && (
             <p className="text-xs text-[var(--ink-muted)]">
               {insuredCount} ticket{insuredCount === 1 ? '' : 's'} insured (green). Reset clears
               them to yellow for a new event.
@@ -648,6 +682,15 @@ export function OperatorPanel({
           </div>
         </section>
       </div>
+
+      <ResetConfirmDialog
+        open={resetDialogOpen}
+        onOpenChange={setResetDialogOpen}
+        onConfirm={({ operatorName, reason }) => {
+          discardAutosave()
+          resetSession({ operatorName, reason })
+        }}
+      />
     </aside>
   )
 }

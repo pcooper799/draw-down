@@ -120,7 +120,8 @@ function useCommandRunner(
           s.pause()
           break
         case 'reset':
-          if (liveOk) s.resetSession()
+          // Post-start reset requires name/reason via the operator dialog — ignore bridge.
+          if (liveOk && !s.drawHasStarted) s.resetSession()
           break
         case 'save':
           s.saveNow()
