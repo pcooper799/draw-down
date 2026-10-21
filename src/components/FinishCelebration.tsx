@@ -29,10 +29,10 @@ export function FinishCelebration({
   lastDrawn,
   digits,
 }: Props) {
-  const winners = [...pool].map((t) => t.number).sort((a, b) => a - b)
-  const lastOut =
-    lastDrawn?.outcome === 'eliminated' ? lastDrawn.ticket : null
-  const single = winners.length === 1
+  const remainingCount = pool.length
+  const lastTicket = lastDrawn?.ticket ?? null
+  const wasReturned = lastDrawn?.outcome === 'returned'
+  const wasOut = lastDrawn?.outcome === 'eliminated'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,10 +47,10 @@ export function FinishCelebration({
           )}
           <DialogHeader className="items-center text-center sm:text-center">
             <DialogTitle className="font-display text-3xl tracking-wide text-[var(--accent)] sm:text-4xl">
-              {single ? 'Winner' : 'Remaining tickets'}
+              Draw complete
             </DialogTitle>
             <DialogDescription className="text-base text-[var(--ink-muted)]">
-              {orgName} · draw complete
+              {orgName} · last ticket drawn
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -58,30 +58,39 @@ export function FinishCelebration({
         <div className="space-y-5 px-6 pb-6">
           <div className="text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--ink-faint)]">
-              {single ? 'Ticket still in' : `${winners.length} tickets still in`}
+              Last drawn
             </p>
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
-              {winners.map((n) => (
-                <span
-                  key={n}
-                  className="finish-winner-number font-display text-[clamp(2.75rem,10vw,5.5rem)] leading-none tracking-wide text-[var(--accent)]"
+            {lastTicket != null ? (
+              <>
+                <p
+                  className={`finish-winner-number font-display mt-3 text-[clamp(3.5rem,14vw,6.5rem)] leading-none tracking-wide ${
+                    wasReturned
+                      ? 'text-[var(--safe)]'
+                      : wasOut
+                        ? 'text-[var(--danger)]'
+                        : 'text-[var(--accent)]'
+                  }`}
                 >
-                  {formatTicket(n, digits)}
-                </span>
-              ))}
-            </div>
+                  {formatTicket(lastTicket, digits)}
+                </p>
+                <p className="mt-3 text-sm font-semibold uppercase tracking-[0.16em]">
+                  {wasReturned ? (
+                    <span className="text-[var(--safe)]">Returned · insurance used</span>
+                  ) : wasOut ? (
+                    <span className="text-[var(--danger)]">Out</span>
+                  ) : (
+                    <span className="text-[var(--ink-muted)]">Drawn</span>
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="mt-3 font-display text-4xl text-[var(--ink-muted)]">—</p>
+            )}
           </div>
 
-          {lastOut != null && (
-            <div className="finish-last-out px-4 py-3 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--ink-faint)]">
-                Last drawn out
-              </p>
-              <p className="font-display mt-1 text-4xl tracking-wide text-[var(--danger)] sm:text-5xl">
-                {formatTicket(lastOut, digits)}
-              </p>
-            </div>
-          )}
+          <p className="text-center text-sm text-[var(--ink-muted)]">
+            {remainingCount} ticket{remainingCount === 1 ? '' : 's'} still in the draw
+          </p>
 
           <Button type="button" className="w-full" size="lg" onClick={() => onOpenChange(false)}>
             Continue
