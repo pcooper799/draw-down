@@ -18,6 +18,7 @@ export default function App() {
         status={session.status}
         digits={session.digits}
         insuredRemaining={session.insuredRemaining}
+        pool={session.pool}
       />
       <OperatorPanel session={session} />
     </div>

@@ -1,5 +1,6 @@
+import { TicketBoard } from '@/components/TicketBoard'
 import { formatTicket } from '@/lib/utils'
-import type { DrawEvent, DrawStatus } from '@/types'
+import type { DrawEvent, DrawStatus, Ticket } from '@/types'
 
 type StageDisplayProps = {
   orgName: string
@@ -12,6 +13,7 @@ type StageDisplayProps = {
   status: DrawStatus
   digits: number
   insuredRemaining: number
+  pool: Ticket[]
 }
 
 export function StageDisplay({
@@ -25,6 +27,7 @@ export function StageDisplay({
   status,
   digits,
   insuredRemaining,
+  pool,
 }: StageDisplayProps) {
   const outcome = lastDrawn?.outcome
   const isReturned = outcome === 'returned'
@@ -38,22 +41,22 @@ export function StageDisplay({
           <img
             src={brandImageDataUrl}
             alt=""
-            className="h-full w-full object-cover opacity-45 stage-brand-drift"
+            className="h-full w-full object-cover opacity-35 stage-brand-drift"
           />
         ) : (
           <div className="h-full w-full stage-fallback-grid" aria-hidden />
         )}
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,12,10,0.55)_0%,rgba(8,12,10,0.82)_48%,rgba(8,12,10,0.95)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(8,12,10,0.62)_0%,rgba(8,12,10,0.88)_40%,rgba(8,12,10,0.96)_100%)]" />
         <div className="absolute inset-0 stage-vignette" />
       </div>
 
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pb-6 pt-5 sm:px-10 sm:pt-7">
-        <header className="flex items-start justify-between gap-4">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 pb-4 pt-4 sm:px-7 sm:pt-5">
+        <header className="flex shrink-0 items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="font-display text-[clamp(2rem,5vw,3.75rem)] leading-none tracking-[0.04em] text-[var(--ink)] stage-brand-in">
+            <p className="font-display text-[clamp(1.75rem,4vw,3rem)] leading-none tracking-[0.04em] text-[var(--ink)] stage-brand-in">
               {orgName}
             </p>
-            <p className="mt-2 max-w-xl text-sm text-[var(--ink-muted)] sm:text-base">
+            <p className="mt-1.5 text-sm text-[var(--ink-muted)]">
               Ticket draw-down · live on stage
             </p>
           </div>
@@ -67,68 +70,63 @@ export function StageDisplay({
           </div>
         </header>
 
-        <div className="mt-6 grid flex-1 grid-rows-[auto_1fr_auto] gap-6">
-          <div className="grid grid-cols-3 gap-3 sm:gap-5">
+        <div className="mt-4 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] gap-3 sm:gap-4">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <Stat label="Remaining" value={String(remaining)} emphasize />
             <Stat label="Stop at" value={String(stopAt)} />
             <Stat label="Insured left" value={String(insuredRemaining)} />
           </div>
 
-          <div className="relative flex items-center justify-center">
-            <div
-              key={flashKey}
-              className={`ticket-reveal relative flex min-h-[220px] w-full max-w-3xl flex-col items-center justify-center px-4 ${
-                isReturned ? 'ticket-reveal--return' : isEliminated ? 'ticket-reveal--out' : ''
+          <div
+            key={flashKey}
+            className={`ticket-reveal flex min-w-[7.5rem] flex-col items-center justify-center border border-[var(--line)] bg-[rgba(12,18,16,0.65)] px-3 py-2 sm:min-w-[9rem] ${
+              isReturned ? 'ticket-reveal--return' : isEliminated ? 'ticket-reveal--out' : ''
+            }`}
+          >
+            <p className="text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-[var(--ink-faint)]">
+              Last drawn
+            </p>
+            <p
+              className={`font-display mt-0.5 text-[clamp(2rem,5vw,3.25rem)] leading-none ${
+                isReturned ? 'text-[var(--safe)]' : isEliminated ? 'text-[var(--danger)]' : 'text-[var(--ink)]'
               }`}
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--ink-faint)]">
-                {finished
-                  ? remaining <= stopAt
-                    ? 'Final remaining'
-                    : 'Draw complete'
-                  : lastDrawn
-                    ? 'Last drawn'
-                    : 'Awaiting first draw'}
-              </p>
-              <p
-                className={`font-display mt-3 text-[clamp(5rem,18vw,11rem)] leading-none tracking-[0.02em] ${
-                  isReturned
-                    ? 'text-[var(--safe)]'
-                    : isEliminated
-                      ? 'text-[var(--ink)]'
-                      : 'text-[var(--ink)]'
-                }`}
-              >
-                {lastDrawn ? formatTicket(lastDrawn.ticket, digits) : '—'}
-              </p>
-              <p className="mt-4 min-h-7 text-center text-sm font-semibold uppercase tracking-[0.18em] sm:text-base">
-                {lastDrawn ? (
-                  isReturned ? (
-                    <span className="text-[var(--safe)]">Insured · returned to pool</span>
-                  ) : (
-                    <span className="text-[var(--danger)]">Eliminated</span>
-                  )
-                ) : (
-                  <span className="text-[var(--ink-muted)]">
-                    Pool of {totalTickets} · pace controlled by operator
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-end justify-between gap-4 border-t border-[var(--line)] pt-4">
-            <p className="text-xs text-[var(--ink-faint)] sm:text-sm">
-              Draw Down · local event software
+              {lastDrawn ? formatTicket(lastDrawn.ticket, digits) : '—'}
             </p>
-            <div className="h-1.5 w-40 overflow-hidden rounded-full bg-[var(--panel-elevated)] sm:w-56">
-              <div
-                className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-700 ease-out"
-                style={{
-                  width: `${Math.max(0, Math.min(100, ((totalTickets - remaining) / Math.max(totalTickets - stopAt, 1)) * 100))}%`,
-                }}
-              />
-            </div>
+            <p className="mt-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em]">
+              {lastDrawn ? (
+                isReturned ? (
+                  <span className="text-[var(--safe)]">Returned</span>
+                ) : (
+                  <span className="text-[var(--danger)]">Out</span>
+                )
+              ) : (
+                <span className="text-[var(--ink-faint)]">Waiting</span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex min-h-0 flex-1 flex-col">
+          <TicketBoard
+            totalTickets={totalTickets}
+            pool={pool}
+            digits={digits}
+            lastDrawnTicket={lastDrawn?.ticket ?? null}
+          />
+        </div>
+
+        <div className="mt-3 flex shrink-0 items-end justify-between gap-4 border-t border-[var(--line)] pt-3">
+          <p className="text-xs text-[var(--ink-faint)] sm:text-sm">
+            Draw Down · local event software
+          </p>
+          <div className="h-1.5 w-40 overflow-hidden rounded-full bg-[var(--panel-elevated)] sm:w-56">
+            <div
+              className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-700 ease-out"
+              style={{
+                width: `${Math.max(0, Math.min(100, ((totalTickets - remaining) / Math.max(totalTickets - stopAt, 1)) * 100))}%`,
+              }}
+            />
           </div>
         </div>
       </div>
@@ -146,12 +144,12 @@ function Stat({
   emphasize?: boolean
 }) {
   return (
-    <div className="border border-[var(--line)] bg-[rgba(12,18,16,0.55)] px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-4">
-      <p className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-[var(--ink-faint)] sm:text-xs">
+    <div className="border border-[var(--line)] bg-[rgba(12,18,16,0.55)] px-2.5 py-2 backdrop-blur-sm sm:px-3 sm:py-3">
+      <p className="text-[0.6rem] font-semibold uppercase tracking-[0.18em] text-[var(--ink-faint)] sm:text-xs">
         {label}
       </p>
       <p
-        className={`font-display mt-1 text-[clamp(1.6rem,4vw,2.75rem)] leading-none tracking-wide ${
+        className={`font-display mt-0.5 text-[clamp(1.35rem,3.2vw,2.25rem)] leading-none tracking-wide ${
           emphasize ? 'text-[var(--accent)]' : 'text-[var(--ink)]'
         }`}
       >
