@@ -55,7 +55,7 @@
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
-    "deleteAppDataOnUninstall": false,
+    "deleteAppDataOnUninstall": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Draw Down",

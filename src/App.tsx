@@ -7,7 +7,7 @@ import { StageDisplay } from '@/components/StageDisplay'
 import { Button } from '@/components/ui/button'
 import { useDrawSession } from '@/hooks/useDrawSession'
 import { hasLiveEventProgress } from '@/lib/drawRules'
-import { getLicenseStatus, type LicenseStatus } from '@/lib/license'
+import { clearLicenseRecord, getLicenseStatus, type LicenseStatus } from '@/lib/license'
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -173,6 +173,12 @@ export default function App() {
           onEnterProjection={() => setProjectionMode(true)}
           licenseBadge={<LicenseBadge status={license.status} />}
           controlsLocked={!license.licensed}
+          onClearActivation={() => {
+            clearLicenseRecord()
+            session.discardAutosave()
+            session.resetSession()
+            license.refresh()
+          }}
         />
       )}
 

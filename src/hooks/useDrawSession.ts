@@ -338,12 +338,11 @@ export function useDrawSession() {
       const stopAt = configRef.current.stopAt
       const safe = clampTotalTickets(total, stopAt)
       applyConfig({ totalTickets: safe })
-      setInsuranceMarks((prev) => {
-        const next = pruneInsuranceMarks(prev, safe, [])
-        insuranceRef.current = next
-        rebuildPool(safe, next)
-        return next
-      })
+      // New pool size = fresh board: all yellow until insurance is marked.
+      const empty = new Set<number>()
+      insuranceRef.current = empty
+      setInsuranceMarks(empty)
+      rebuildPool(safe, empty)
     },
     [applyConfig, rebuildPool],
   )
@@ -352,8 +351,12 @@ export function useDrawSession() {
     if (statusRef.current === 'running') {
       clearTimer()
     }
-    rebuildPool(configRef.current.totalTickets, insuranceRef.current)
-    setSaveNotice('Session reset')
+    // Reset clears insurance so every ticket comes back in yellow.
+    const empty = new Set<number>()
+    insuranceRef.current = empty
+    setInsuranceMarks(empty)
+    rebuildPool(configRef.current.totalTickets, empty)
+    setSaveNotice('Session reset — all tickets yellow')
   }, [rebuildPool, clearTimer])
 
   const captureSnapshot = useCallback((): SessionSnapshot => {

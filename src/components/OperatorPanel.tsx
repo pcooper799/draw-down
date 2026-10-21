@@ -35,6 +35,8 @@ type Props = {
   licenseBadge?: ReactNode
   /** When true, block start/reset/setup that would continue an unlicensed event. */
   controlsLocked?: boolean
+  /** Wipe activation + local session on this PC (does not refund a code). */
+  onClearActivation?: () => void
 }
 
 export function OperatorPanel({
@@ -42,6 +44,7 @@ export function OperatorPanel({
   onEnterProjection,
   licenseBadge,
   controlsLocked = false,
+  onClearActivation,
 }: Props) {
   const {
     config,
@@ -279,8 +282,22 @@ export function OperatorPanel({
                 </Button>
                 <div className="space-y-2 border-t border-[var(--line)] pt-4">
                   <p className="text-xs text-[var(--ink-faint)]">
-                    Remove this app from the PC. Uses the Windows uninstaller from the NSIS install.
+                    Activation is stored on this PC. Older uninstalls left that data behind — use
+                    Clear activation below, or Uninstall (new builds wipe app data).
                   </p>
+                  {onClearActivation && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        onClearActivation()
+                        setSettingsOpen(false)
+                      }}
+                    >
+                      Clear activation on this PC
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant="danger"
@@ -290,6 +307,8 @@ export function OperatorPanel({
                       void (async () => {
                         setUninstallBusy(true)
                         setUninstallMessage(null)
+                        // Wipe license/session before the uninstaller runs.
+                        onClearActivation?.()
                         const api = window.drawDown
                         if (!api?.uninstall) {
                           setUninstallMessage(
