@@ -1,9 +1,12 @@
 {
   "name": "draw-down",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Windows desktop event app for ticket draw-downs with insurance.",
-  "author": "Draw Down",
+  "author": {
+    "name": "Phillip Cooper",
+    "email": "pcooper799@gmail.com"
+  },
   "type": "module",
   "main": "dist-electron/main/index.js",
   "scripts": {

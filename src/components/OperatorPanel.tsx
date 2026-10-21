@@ -305,7 +305,7 @@ export function OperatorPanel({ session, onEnterProjection }: Props) {
                         event.outcome === 'returned' ? 'text-[var(--safe)]' : 'text-[var(--danger)]'
                       }
                     >
-                      {event.outcome === 'returned' ? 'Returned' : 'Out'}
+                      {event.outcome === 'returned' ? 'Returned · used' : 'Out'}
                     </span>
                   </li>
                 ))}

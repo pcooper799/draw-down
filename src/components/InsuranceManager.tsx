@@ -45,7 +45,7 @@ export function InsuranceManager({ session, locked }: Props) {
         <div>
           <h3 className="font-display text-xl tracking-wide text-[var(--ink)]">Insurance</h3>
           <p className="mt-1 text-sm text-[var(--ink-muted)]">
-            Insured tickets return to the pool when drawn.
+            Insured tickets return once as regular; next draw eliminates them.
           </p>
         </div>
         <div className="text-right">

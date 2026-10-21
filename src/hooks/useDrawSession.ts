@@ -180,7 +180,20 @@ export function useDrawSession() {
     setFlashKey((k) => k + 1)
     setHistory((h) => [event, ...h].slice(0, 50))
 
-    if (!ticket.insured) {
+    if (ticket.insured) {
+      // One-time insurance: return to the pool as a regular (uninsured) ticket.
+      setInsuranceMarks((prev) => {
+        const next = new Set(prev)
+        next.delete(ticket.number)
+        insuranceRef.current = next
+        return next
+      })
+      const nextPool = currentPool.map((t) =>
+        t.number === ticket.number ? { ...t, insured: false } : t,
+      )
+      poolRef.current = nextPool
+      setPool(nextPool)
+    } else {
       const nextPool = currentPool.filter((t) => t.number !== ticket.number)
       poolRef.current = nextPool
       setPool(nextPool)

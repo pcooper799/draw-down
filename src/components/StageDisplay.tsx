@@ -96,7 +96,7 @@ export function StageDisplay({
             <p className="mt-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em]">
               {lastDrawn ? (
                 isReturned ? (
-                  <span className="text-[var(--safe)]">Returned</span>
+                  <span className="text-[var(--safe)]">Returned · used</span>
                 ) : (
                   <span className="text-[var(--danger)]">Out</span>
                 )
