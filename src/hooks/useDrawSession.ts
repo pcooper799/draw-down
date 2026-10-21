@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  canInsureTicket,
+  clampPaceMs,
+  clampStopAt,
+  clampTotalTickets,
+  MAX_TICKETS,
+  pruneInsuranceMarks,
+} from '@/lib/drawRules'
+import {
   buildPoolFromSnapshot,
   clearAutosave,
   downloadSnapshotFile,
@@ -25,12 +33,21 @@ function buildPool(total: number, insured: Set<number>): Ticket[] {
 }
 
 function hydrateFromSnapshot(snapshot: SessionSnapshot) {
-  const marks = new Set(snapshot.insuranceMarks)
+  const total = clampTotalTickets(snapshot.config.totalTickets, snapshot.config.stopAt)
+  const stopAt = clampStopAt(snapshot.config.stopAt, total)
+  const config: SessionConfig = {
+    ...snapshot.config,
+    totalTickets: total,
+    stopAt,
+    paceMs: clampPaceMs(snapshot.config.paceMs),
+  }
+  const eliminated = snapshot.eliminated.filter((n) => n >= 1 && n <= total)
+  const marks = pruneInsuranceMarks(snapshot.insuranceMarks, total, eliminated)
   return {
-    config: snapshot.config,
+    config,
     insuranceMarks: marks,
-    pool: buildPoolFromSnapshot(snapshot.config.totalTickets, snapshot.eliminated, marks),
-    eliminated: snapshot.eliminated,
+    pool: buildPoolFromSnapshot(total, eliminated, marks),
+    eliminated,
     history: snapshot.history,
     lastDrawn: snapshot.lastDrawn,
     status: snapshot.status as DrawStatus,
@@ -75,6 +92,8 @@ export function useDrawSession() {
   const historyRef = useRef(history)
   const lastDrawnRef = useRef(lastDrawn)
   const readyToAutosave = useRef(false)
+  /** Prevents overlapping start()/draw scheduling from key repeat or double-clicks. */
+  const drawLockRef = useRef(false)
 
   useEffect(() => {
     poolRef.current = pool
@@ -125,34 +144,52 @@ export function useDrawSession() {
   const applyConfig = useCallback((next: Partial<SessionConfig>) => {
     setConfig((prev) => {
       const merged = { ...prev, ...next }
-      if (merged.stopAt < 1) merged.stopAt = 1
-      if (merged.totalTickets < 1) merged.totalTickets = 1
-      if (merged.totalTickets < merged.stopAt) merged.totalTickets = merged.stopAt
-      if (merged.paceMs < 200) merged.paceMs = 200
-      if (merged.paceMs > 60_000) merged.paceMs = 60_000
+      merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
+      merged.totalTickets = clampTotalTickets(merged.totalTickets, merged.stopAt)
+      merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
+      merged.paceMs = clampPaceMs(merged.paceMs)
+      if (!merged.orgName?.trim()) merged.orgName = prev.orgName
+      configRef.current = merged
       return merged
     })
   }, [])
 
   const syncInsuranceIntoPool = useCallback((marks: Set<number>) => {
-    setPool((prev) => prev.map((t) => ({ ...t, insured: marks.has(t.number) })))
+    setPool((prev) => {
+      const next = prev.map((t) => ({ ...t, insured: marks.has(t.number) }))
+      poolRef.current = next
+      return next
+    })
   }, [])
 
   const setTicketInsured = useCallback(
     (ticket: number, insured: boolean) => {
+      if (statusRef.current === 'running') return
+      if (insured && !canInsureTicket(ticket, configRef.current.totalTickets, eliminatedRef.current)) {
+        setSaveNotice('That ticket is already out — cannot insure it')
+        return
+      }
       setInsuranceMarks((prev) => {
         const next = new Set(prev)
         if (insured) next.add(ticket)
         else next.delete(ticket)
-        syncInsuranceIntoPool(next)
-        return next
+        const pruned = pruneInsuranceMarks(
+          next,
+          configRef.current.totalTickets,
+          eliminatedRef.current,
+        )
+        insuranceRef.current = pruned
+        syncInsuranceIntoPool(pruned)
+        return pruned
       })
     },
     [syncInsuranceIntoPool],
   )
 
   const clearAllInsurance = useCallback(() => {
+    if (statusRef.current === 'running') return
     const empty = new Set<number>()
+    insuranceRef.current = empty
     setInsuranceMarks(empty)
     syncInsuranceIntoPool(empty)
   }, [syncInsuranceIntoPool])
@@ -160,23 +197,35 @@ export function useDrawSession() {
   const rebuildPool = useCallback(
     (total: number, marks: Set<number> = insuranceRef.current) => {
       clearTimer()
-      const safeTotal = Math.max(1, total)
-      setPool(buildPool(safeTotal, marks))
+      drawLockRef.current = false
+      const safeTotal = clampTotalTickets(total, configRef.current.stopAt)
+      const pruned = pruneInsuranceMarks(marks, safeTotal, [])
+      const nextPool = buildPool(safeTotal, pruned)
+      poolRef.current = nextPool
+      eliminatedRef.current = []
+      historyRef.current = []
+      lastDrawnRef.current = null
+      statusRef.current = 'idle'
+      insuranceRef.current = pruned
+      setPool(nextPool)
       setEliminated([])
       setHistory([])
       setLastDrawn(null)
       setStatus('idle')
+      setInsuranceMarks(pruned)
     },
     [clearTimer],
   )
 
   const commitTotalTickets = useCallback(
     (total: number) => {
+      if (statusRef.current === 'running') return
       const stopAt = configRef.current.stopAt
-      const safe = Math.max(stopAt, Math.max(1, total))
+      const safe = clampTotalTickets(total, stopAt)
       applyConfig({ totalTickets: safe })
       setInsuranceMarks((prev) => {
-        const next = new Set([...prev].filter((n) => n <= safe))
+        const next = pruneInsuranceMarks(prev, safe, [])
+        insuranceRef.current = next
         rebuildPool(safe, next)
         return next
       })
@@ -185,8 +234,12 @@ export function useDrawSession() {
   )
 
   const resetSession = useCallback(() => {
+    if (statusRef.current === 'running') {
+      clearTimer()
+    }
     rebuildPool(configRef.current.totalTickets, insuranceRef.current)
-  }, [rebuildPool])
+    setSaveNotice('Session reset')
+  }, [rebuildPool, clearTimer])
 
   const captureSnapshot = useCallback((): SessionSnapshot => {
     return toSnapshot({
@@ -202,19 +255,33 @@ export function useDrawSession() {
   const applySnapshot = useCallback(
     (snapshot: SessionSnapshot, notice: string) => {
       clearTimer()
+      drawLockRef.current = false
       const hydrated = hydrateFromSnapshot(snapshot)
+      configRef.current = hydrated.config
+      insuranceRef.current = hydrated.insuranceMarks
+      poolRef.current = hydrated.pool
+      eliminatedRef.current = hydrated.eliminated
+      historyRef.current = hydrated.history
+      lastDrawnRef.current = hydrated.lastDrawn
+      statusRef.current = hydrated.status
       setConfig(hydrated.config)
       setInsuranceMarks(hydrated.insuranceMarks)
-      insuranceRef.current = hydrated.insuranceMarks
       setPool(hydrated.pool)
-      poolRef.current = hydrated.pool
       setEliminated(hydrated.eliminated)
       setHistory(hydrated.history)
       setLastDrawn(hydrated.lastDrawn)
       setStatus(hydrated.status)
-      statusRef.current = hydrated.status
       setLastSavedAt(snapshot.savedAt)
-      writeAutosave(snapshot)
+      writeAutosave(
+        toSnapshot({
+          config: hydrated.config,
+          insuranceMarks: hydrated.insuranceMarks,
+          eliminated: hydrated.eliminated,
+          history: hydrated.history,
+          lastDrawn: hydrated.lastDrawn,
+          status: hydrated.status,
+        }),
+      )
       setSaveNotice(notice)
     },
     [clearTimer],
@@ -236,6 +303,11 @@ export function useDrawSession() {
 
   const loadSaveFile = useCallback(
     async (file: File) => {
+      if (statusRef.current === 'running') {
+        clearTimer()
+        statusRef.current = 'paused'
+        setStatus('paused')
+      }
       const snapshot = await readSnapshotFromFile(file)
       if (!snapshot) {
         setSaveNotice('Could not read that save file')
@@ -244,7 +316,7 @@ export function useDrawSession() {
       applySnapshot(snapshot, 'Loaded save file')
       return true
     },
-    [applySnapshot],
+    [applySnapshot, clearTimer],
   )
 
   const discardAutosave = useCallback(() => {
@@ -273,18 +345,37 @@ export function useDrawSession() {
     captureSnapshot,
   ])
 
+  // Persist immediately if the window is closing / refreshing mid-event
+  useEffect(() => {
+    const flush = () => {
+      writeAutosave(captureSnapshot())
+    }
+    window.addEventListener('beforeunload', flush)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('beforeunload', flush)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [captureSnapshot])
+
   const drawOnce = useCallback(() => {
     const currentPool = poolRef.current
     const cfg = configRef.current
-    if (currentPool.length <= cfg.stopAt) {
+    if (currentPool.length === 0 || currentPool.length <= cfg.stopAt) {
       statusRef.current = 'finished'
       setStatus('finished')
       clearTimer()
+      drawLockRef.current = false
       return
     }
 
     const index = Math.floor(Math.random() * currentPool.length)
     const ticket = currentPool[index]
+    if (!ticket) {
+      clearTimer()
+      return
+    }
+
     const event: DrawEvent = {
       id: `${Date.now()}-${ticket.number}-${Math.random().toString(36).slice(2, 7)}`,
       ticket: ticket.number,
@@ -293,9 +384,14 @@ export function useDrawSession() {
       at: Date.now(),
     }
 
+    lastDrawnRef.current = event
     setLastDrawn(event)
     setFlashKey((k) => k + 1)
-    setHistory((h) => [event, ...h].slice(0, 50))
+    setHistory((h) => {
+      const next = [event, ...h].slice(0, 50)
+      historyRef.current = next
+      return next
+    })
 
     if (ticket.insured) {
       setInsuranceMarks((prev) => {
@@ -313,47 +409,106 @@ export function useDrawSession() {
       const nextPool = currentPool.filter((t) => t.number !== ticket.number)
       poolRef.current = nextPool
       setPool(nextPool)
-      setEliminated((prev) => [ticket.number, ...prev])
+      setEliminated((prev) => {
+        const next = [ticket.number, ...prev]
+        eliminatedRef.current = next
+        // Drop any stale insurance mark for tickets that are now out
+        if (insuranceRef.current.has(ticket.number)) {
+          const marks = new Set(insuranceRef.current)
+          marks.delete(ticket.number)
+          insuranceRef.current = marks
+          setInsuranceMarks(marks)
+        }
+        return next
+      })
       if (nextPool.length <= cfg.stopAt) {
         statusRef.current = 'finished'
         setStatus('finished')
         clearTimer()
+        drawLockRef.current = false
       }
     }
   }, [clearTimer])
 
   const scheduleNext = useCallback(() => {
     clearTimer()
+    if (statusRef.current !== 'running') return
+    if (poolRef.current.length <= configRef.current.stopAt) {
+      statusRef.current = 'finished'
+      setStatus('finished')
+      drawLockRef.current = false
+      return
+    }
     timerRef.current = window.setTimeout(() => {
+      timerRef.current = null
       if (statusRef.current !== 'running') return
       drawOnce()
       if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
         scheduleNext()
+      } else {
+        drawLockRef.current = false
       }
     }, configRef.current.paceMs)
   }, [clearTimer, drawOnce])
 
   const start = useCallback(() => {
+    if (statusRef.current === 'running' || drawLockRef.current) return
     if (poolRef.current.length <= configRef.current.stopAt) {
+      statusRef.current = 'finished'
       setStatus('finished')
       return
     }
-    setStatus('running')
+    drawLockRef.current = true
     statusRef.current = 'running'
+    setStatus('running')
     drawOnce()
     if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
       scheduleNext()
+    } else {
+      drawLockRef.current = false
     }
   }, [drawOnce, scheduleNext])
 
   const pause = useCallback(() => {
     clearTimer()
-    setStatus((s) => (s === 'running' ? 'paused' : s))
+    drawLockRef.current = false
+    if (statusRef.current === 'running') {
+      statusRef.current = 'paused'
+      setStatus('paused')
+      // Flush save so a crash after pause is recoverable
+      writeAutosave(
+        toSnapshot({
+          config: configRef.current,
+          insuranceMarks: insuranceRef.current,
+          eliminated: eliminatedRef.current,
+          history: historyRef.current,
+          lastDrawn: lastDrawnRef.current,
+          status: 'paused',
+        }),
+      )
+    }
   }, [clearTimer])
 
+  // Live pace edits while drawing: reschedule with the new interval (no double timers)
   useEffect(() => {
-    if (status === 'running') scheduleNext()
-  }, [config.paceMs]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (statusRef.current === 'running') {
+      scheduleNext()
+    }
+    // Only re-run when pace changes — not when scheduleNext identity changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.paceMs])
+
+  // Auto-pause if the window/tab is hidden — browsers throttle timers and skip draws
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden && statusRef.current === 'running') {
+        pause()
+        setSaveNotice('Paused — window was hidden (safe for the draw)')
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [pause])
 
   useEffect(() => () => clearTimer(), [clearTimer])
 
@@ -364,7 +519,7 @@ export function useDrawSession() {
     pool,
     remaining,
     insuredRemaining,
-    insuredCount: insuranceMarks.size,
+    insuredCount: insuredRemaining,
     insuranceMarks,
     eliminated,
     history,
@@ -372,6 +527,7 @@ export function useDrawSession() {
     lastDrawn,
     flashKey,
     digits,
+    maxTickets: MAX_TICKETS,
     start,
     pause,
     resetSession,

@@ -1,6 +1,6 @@
 {
   "name": "draw-down",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Windows desktop event app for ticket draw-downs with insurance.",
   "author": {
@@ -19,6 +19,7 @@
     "dist:win:portable": "npm run build:vite && electron-builder --win portable zip --x64 --publish never",
     "dist:dir": "npm run build:vite && electron-builder --win --x64 --dir --publish never",
     "license:issue": "node scripts/issue-license.mjs",
+    "test:gameplay": "node scripts/gameplay-invariants.mjs",
     "release:repo": "node scripts/set-release-repo.mjs",
     "preview": "vite preview --port 43127 --host 127.0.0.1"
   },

@@ -23,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
+import { MAX_TICKETS } from '@/lib/drawRules'
 import { formatSavedAt } from '@/lib/sessionPersist'
 import { formatTicket } from '@/lib/utils'
 import type { DrawSession } from '@/hooks/useDrawSession'
@@ -31,9 +32,16 @@ type Props = {
   session: DrawSession
   onEnterProjection: () => void
   licenseBadge?: ReactNode
+  /** When true, block start/reset/setup that would continue an unlicensed event. */
+  controlsLocked?: boolean
 }
 
-export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Props) {
+export function OperatorPanel({
+  session,
+  onEnterProjection,
+  licenseBadge,
+  controlsLocked = false,
+}: Props) {
   const {
     config,
     applyConfig,
@@ -52,7 +60,8 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
     saveNotice,
   } = session
 
-  const locked = status === 'running'
+  const locked = status === 'running' || controlsLocked
+  const drawLocked = status === 'running'
   const fileRef = useRef<HTMLInputElement>(null)
   const loadRef = useRef<HTMLInputElement>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -76,11 +85,15 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
   }, [config.paceMs])
 
   const commitSettingsDrafts = () => {
+    if (controlsLocked) return
     const orgName = orgDraft.trim() || 'Your Organization'
     const stopParsed = Number.parseInt(stopDraft, 10)
     const stopAt = Number.isFinite(stopParsed) ? Math.max(1, stopParsed) : 1
     const totalParsed = Number.parseInt(totalDraft, 10)
-    const total = Number.isFinite(totalParsed) && totalParsed >= 1 ? totalParsed : config.totalTickets
+    const total =
+      Number.isFinite(totalParsed) && totalParsed >= 1
+        ? Math.min(MAX_TICKETS, totalParsed)
+        : config.totalTickets
 
     applyConfig({ orgName, stopAt })
     setStopDraft(String(stopAt))
@@ -88,7 +101,7 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
 
     if (total !== config.totalTickets) {
       commitTotalTickets(total)
-      setTotalDraft(String(Math.max(total, stopAt)))
+      setTotalDraft(String(Math.min(MAX_TICKETS, Math.max(total, stopAt))))
     } else {
       setTotalDraft(String(config.totalTickets))
     }
@@ -143,12 +156,20 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
           <Dialog
             open={settingsOpen}
             onOpenChange={(open) => {
+              if (controlsLocked) return
               if (!open && settingsOpen) commitSettingsDrafts()
               setSettingsOpen(open)
             }}
           >
             <DialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="gap-2" aria-label="Session settings">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                aria-label="Session settings"
+                disabled={controlsLocked}
+              >
                 <Settings2 />
                 Setup
               </Button>
@@ -158,7 +179,7 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
                 <DialogTitle>Session setup</DialogTitle>
                 <DialogDescription>
                   Configure the pool before you go live. Changing ticket count resets the draw.
-                  Values save when you close this dialog.
+                  Values save when you close this dialog. Max {MAX_TICKETS} tickets.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 pt-2">
@@ -177,7 +198,7 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
                       id="total"
                       inputMode="numeric"
                       value={totalDraft}
-                      disabled={locked}
+                      disabled={drawLocked}
                       onChange={(e) => setTotalDraft(e.target.value)}
                     />
                   </div>
@@ -187,7 +208,7 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
                       id="stop"
                       inputMode="numeric"
                       value={stopDraft}
-                      disabled={locked}
+                      disabled={drawLocked}
                       onChange={(e) => setStopDraft(e.target.value)}
                     />
                   </div>
@@ -287,6 +308,7 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
                 className="h-8 w-20 text-right font-mono"
                 inputMode="decimal"
                 value={paceDraft}
+                disabled={controlsLocked}
                 onChange={(e) => setPaceDraft(e.target.value)}
                 onBlur={() => commitPaceSeconds(paceDraft)}
                 onKeyDown={(e) => {
@@ -302,6 +324,7 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
             min={500}
             max={10000}
             step={100}
+            disabled={controlsLocked}
             onValueChange={(v) => applyConfig({ paceMs: v[0] ?? 2500 })}
           />
           <p className="text-xs text-[var(--ink-faint)]">
@@ -322,7 +345,9 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
                 className="col-span-2"
                 size="lg"
                 onClick={start}
-                disabled={status === 'finished' || remaining <= config.stopAt}
+                disabled={
+                  controlsLocked || status === 'finished' || remaining <= config.stopAt
+                }
               >
                 <Play />
                 {status === 'paused' ? 'Resume' : 'Start'}
@@ -333,12 +358,17 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
               variant="outline"
               size="lg"
               onClick={resetSession}
-              disabled={locked}
+              disabled={drawLocked || controlsLocked}
               aria-label="Reset draw"
             >
               <RotateCcw />
             </Button>
           </div>
+          {controlsLocked && (
+            <p className="border border-[var(--danger)]/40 bg-[rgba(211,90,74,0.1)] px-3 py-2 text-sm text-[var(--danger)]">
+              License expired — enter a new code to resume the draw.
+            </p>
+          )}
           {status === 'finished' && (
             <p className="border border-[var(--accent)]/40 bg-[rgba(232,168,56,0.1)] px-3 py-2 text-sm text-[var(--accent)]">
               Draw complete — {remaining} ticket{remaining === 1 ? '' : 's'} remain.
@@ -347,7 +377,7 @@ export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Prop
         </section>
 
         <section className="operator-section">
-          <InsuranceManager session={session} locked={locked} />
+          <InsuranceManager session={session} locked={drawLocked || controlsLocked} />
         </section>
 
         <section className="operator-section space-y-2">

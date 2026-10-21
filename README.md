@@ -67,10 +67,10 @@ npm run dist:win:portable   # portable + zip only (reliable on Linux/macOS)
 Artifacts land under:
 
 ```text
-release/0.1.4/
-  Draw Down-0.1.4-win-x64.exe          # NSIS installer (best from Windows / GitHub Actions)
-  Draw Down-0.1.4-win-portable.exe     # single-file portable .exe (no install wizard)
-  Draw Down-0.1.4-win-x64.zip          # unpacked app folder as zip
+release/0.1.5/
+  Draw Down-0.1.5-win-x64.exe          # NSIS installer (best from Windows / GitHub Actions)
+  Draw Down-0.1.5-win-portable.exe     # single-file portable .exe (no install wizard)
+  Draw Down-0.1.5-win-x64.zip          # unpacked app folder as zip
 ```
 
 The desktop / Start Menu shortcut uses `build/icon.ico` (raffle drum app image).
@@ -120,5 +120,6 @@ The download page (`website/index.html`) auto-resolves the latest Release assets
 | `npm run electron:dev` | Dev server + Electron |
 | `npm run typecheck` | TypeScript check |
 | `npm run license:issue` | Generate a paid 48-hour activation code |
+| `npm run test:gameplay` | Run draw/insurance invariant checks |
 | `npm run dist` / `dist:win` | Build Windows NSIS + portable installers |
 | `npm run release:repo -- owner/repo` | One-time rewrite of GitHub publish placeholders |

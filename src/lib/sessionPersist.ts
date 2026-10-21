@@ -1,3 +1,9 @@
+import {
+  clampPaceMs,
+  clampStopAt,
+  clampTotalTickets,
+  pruneInsuranceMarks,
+} from '@/lib/drawRules'
 import type { DrawEvent, DrawStatus, SessionConfig, Ticket } from '@/types'
 import { DEFAULT_CONFIG } from '@/types'
 
@@ -62,12 +68,17 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
   if (data.version !== SNAPSHOT_VERSION) return null
   if (!data.config || typeof data.config !== 'object') return null
 
+  const rawTotal = Number(data.config.totalTickets) || DEFAULT_CONFIG.totalTickets
+  const rawStop = Number(data.config.stopAt) || DEFAULT_CONFIG.stopAt
+  const totalTickets = clampTotalTickets(rawTotal, rawStop)
+  const stopAt = clampStopAt(rawStop, totalTickets)
+
   const config: SessionConfig = {
     ...DEFAULT_CONFIG,
     ...data.config,
-    totalTickets: Math.max(1, Number(data.config.totalTickets) || DEFAULT_CONFIG.totalTickets),
-    stopAt: Math.max(1, Number(data.config.stopAt) || DEFAULT_CONFIG.stopAt),
-    paceMs: Math.max(200, Number(data.config.paceMs) || DEFAULT_CONFIG.paceMs),
+    totalTickets,
+    stopAt,
+    paceMs: clampPaceMs(Number(data.config.paceMs) || DEFAULT_CONFIG.paceMs),
     orgName: String(data.config.orgName || DEFAULT_CONFIG.orgName),
     brandImageDataUrl:
       typeof data.config.brandImageDataUrl === 'string' || data.config.brandImageDataUrl === null
@@ -75,12 +86,27 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
         : null,
   }
 
-  const insuranceMarks = Array.isArray(data.insuranceMarks)
-    ? data.insuranceMarks.filter((n): n is number => Number.isFinite(n) && n >= 1)
+  const eliminatedRaw = Array.isArray(data.eliminated)
+    ? data.eliminated.filter((n): n is number => Number.isFinite(n) && n >= 1 && n <= totalTickets)
     : []
-  const eliminated = Array.isArray(data.eliminated)
-    ? data.eliminated.filter((n): n is number => Number.isFinite(n) && n >= 1)
-    : []
+  // Deduplicate while preserving first-seen order (most recent outs first in live play)
+  const eliminated: number[] = []
+  const seenOut = new Set<number>()
+  for (const n of eliminatedRaw) {
+    if (seenOut.has(n)) continue
+    seenOut.add(n)
+    eliminated.push(n)
+  }
+
+  const insuranceMarks = [
+    ...pruneInsuranceMarks(
+      Array.isArray(data.insuranceMarks)
+        ? data.insuranceMarks.filter((n): n is number => Number.isFinite(n) && n >= 1)
+        : [],
+      totalTickets,
+      eliminated,
+    ),
+  ].sort((a, b) => a - b)
 
   const status: SessionSnapshot['status'] =
     data.status === 'finished' || data.status === 'paused' || data.status === 'idle'

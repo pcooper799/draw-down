@@ -6,6 +6,7 @@ import { OperatorPanel } from '@/components/OperatorPanel'
 import { StageDisplay } from '@/components/StageDisplay'
 import { Button } from '@/components/ui/button'
 import { useDrawSession } from '@/hooks/useDrawSession'
+import { hasLiveEventProgress } from '@/lib/drawRules'
 import { getLicenseStatus, type LicenseStatus } from '@/lib/license'
 
 function isTypingTarget(target: EventTarget | null) {
@@ -24,7 +25,7 @@ function useLicenseGate() {
   const refresh = useCallback(() => setStatus(getLicenseStatus()), [])
 
   useEffect(() => {
-    const id = window.setInterval(refresh, 30_000)
+    const id = window.setInterval(refresh, 15_000)
     return () => window.clearInterval(id)
   }, [refresh])
 
@@ -36,18 +37,50 @@ export default function App() {
   const license = useLicenseGate()
   const session = useDrawSession()
   const [projectionMode, setProjectionMode] = useState(false)
-  const { status, start, pause, remaining, config, saveNow } = session
+  const [renewOpen, setRenewOpen] = useState(false)
+  const { status, start, pause, remaining, config, saveNow, eliminated, history } = session
   const finish = useFinishCelebration(status)
+
+  const liveEvent = hasLiveEventProgress({
+    status,
+    eliminatedCount: eliminated.length,
+    historyCount: history.length,
+  })
+
+  // Hard gate only when there is no in-progress event to protect
+  const hardBlocked = !license.licensed && !liveEvent
+
+  // Mid-event expiry: pause immediately and prompt for a new code (keep stage mounted)
+  useEffect(() => {
+    if (license.licensed) {
+      setRenewOpen(false)
+      return
+    }
+    if (status === 'running') {
+      pause()
+      saveNow()
+    }
+    if (liveEvent) setRenewOpen(true)
+  }, [license.licensed, liveEvent, status, pause, saveNow])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       if (isTypingTarget(event.target)) return
-      if (!license.licensed) return
 
+      // Always allow escaping projection, even if license just expired
       if (event.key === 'Escape' && projectionMode) {
         event.preventDefault()
         setProjectionMode(false)
+        return
+      }
+
+      if (!license.licensed) {
+        // Safety: Space can still pause if a timer somehow still running
+        if ((event.key === ' ' || event.code === 'Space') && !event.repeat && status === 'running') {
+          event.preventDefault()
+          pause()
+        }
         return
       }
 
@@ -55,7 +88,8 @@ export default function App() {
         (event.key === 'p' || event.key === 'P') &&
         !event.metaKey &&
         !event.ctrlKey &&
-        !event.altKey
+        !event.altKey &&
+        !event.repeat
       ) {
         event.preventDefault()
         setProjectionMode((v) => !v)
@@ -69,6 +103,8 @@ export default function App() {
       }
 
       if (event.key === ' ' || event.code === 'Space') {
+        // Key-repeat would flip start/pause every frame — ignore repeats
+        if (event.repeat) return
         event.preventDefault()
         if (status === 'running') {
           pause()
@@ -82,9 +118,18 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [projectionMode, status, start, pause, remaining, config.stopAt, saveNow, license.licensed])
+  }, [
+    projectionMode,
+    status,
+    start,
+    pause,
+    remaining,
+    config.stopAt,
+    saveNow,
+    license.licensed,
+  ])
 
-  if (!license.licensed) {
+  if (hardBlocked) {
     return <ActivationScreen status={license.status} onActivated={license.refresh} />
   }
 
@@ -93,6 +138,15 @@ export default function App() {
       {license.isDev && license.status.state !== 'active' && (
         <div className="absolute left-3 top-3 z-30 border border-[var(--accent)]/40 bg-black/70 px-2 py-1 text-[0.65rem] text-[var(--accent)]">
           Dev mode · license gate skipped
+        </div>
+      )}
+
+      {!license.licensed && liveEvent && (
+        <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-center gap-3 border-b border-[var(--danger)]/50 bg-[rgba(80,20,16,0.92)] px-3 py-2 text-sm text-[var(--ink)]">
+          <span>License expired — draw paused. Enter a new code to continue.</span>
+          <Button type="button" size="sm" variant="secondary" onClick={() => setRenewOpen(true)}>
+            Enter code
+          </Button>
         </div>
       )}
 
@@ -115,6 +169,7 @@ export default function App() {
           session={session}
           onEnterProjection={() => setProjectionMode(true)}
           licenseBadge={<LicenseBadge status={license.status} />}
+          controlsLocked={!license.licensed}
         />
       )}
 
@@ -144,6 +199,18 @@ export default function App() {
         lastDrawn={session.lastDrawn}
         digits={session.digits}
       />
+
+      {renewOpen && !license.licensed && (
+        <ActivationScreen
+          status={license.status}
+          onActivated={() => {
+            license.refresh()
+            setRenewOpen(false)
+          }}
+          variant="overlay"
+          onDismiss={liveEvent ? () => setRenewOpen(false) : undefined}
+        />
+      )}
     </div>
   )
 }

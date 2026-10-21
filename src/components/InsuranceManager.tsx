@@ -16,6 +16,7 @@ export function InsuranceManager({ session, locked }: Props) {
     config,
     insuranceMarks,
     insuredCount,
+    eliminated,
     setTicketInsured,
     clearAllInsurance,
     digits,
@@ -23,14 +24,18 @@ export function InsuranceManager({ session, locked }: Props) {
 
   const [ticketInput, setTicketInput] = useState('')
 
+  const eliminatedSet = useMemo(() => new Set(eliminated), [eliminated])
+
   const insuredList = useMemo(
-    () => [...insuranceMarks].sort((a, b) => a - b),
-    [insuranceMarks],
+    () => [...insuranceMarks].filter((n) => !eliminatedSet.has(n)).sort((a, b) => a - b),
+    [insuranceMarks, eliminatedSet],
   )
 
   const ticketNum = Number.parseInt(ticketInput, 10)
-  const ticketValid =
+  const inRange =
     Number.isFinite(ticketNum) && ticketNum >= 1 && ticketNum <= config.totalTickets
+  const alreadyOut = inRange && eliminatedSet.has(ticketNum)
+  const ticketValid = inRange && !alreadyOut
   const alreadyInsured = ticketValid && insuranceMarks.has(ticketNum)
 
   const addInsurance = () => {
@@ -99,6 +104,9 @@ export function InsuranceManager({ session, locked }: Props) {
             </Button>
           )}
         </div>
+        {alreadyOut && (
+          <p className="text-xs text-[var(--danger)]">Ticket {ticketNum} is already out.</p>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-2">

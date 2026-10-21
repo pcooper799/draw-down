@@ -92,12 +92,13 @@ export function FinishCelebration({
   )
 }
 
-/** Opens automatically once when status becomes finished. */
+/** Opens automatically once when status becomes finished; closes after reset. */
 export function useFinishCelebration(status: string) {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
     if (status === 'finished') setOpen(true)
+    else setOpen(false)
   }, [status])
 
   return { open, setOpen }
