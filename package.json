@@ -43,5 +43,10 @@
     "vite": "^7.1.7",
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pcooper799/draw-down.git"
+  },
+  "homepage": "https://pcooper799.github.io/draw-down/"
 }
