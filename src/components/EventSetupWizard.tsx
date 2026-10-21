@@ -65,6 +65,7 @@ export function EventSetupWizard({
   const [testing, setTesting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Reset drafts only when the wizard opens — not when applyConfig updates mid-flow.
   useEffect(() => {
     if (!open) return
     setStep(0)
@@ -73,7 +74,8 @@ export function EventSetupWizard({
     setTiersDraft((config.prizeTiers?.length ? config.prizeTiers : [config.stopAt]).join(', '))
     setPaceDraft((config.paceMs / 1000).toFixed(1))
     setChecks(null)
-  }, [open, config.orgName, config.totalTickets, config.prizeTiers, config.stopAt, config.paceMs])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally open-only
+  }, [open])
 
   const parsedTotal = useMemo(() => {
     const n = Number.parseInt(totalDraft, 10)
