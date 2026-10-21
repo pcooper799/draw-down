@@ -15,6 +15,5 @@ release
 /playwright-report/
 /playwright/.cache/
 
-# Seller-only Ed25519 private key material — never commit
-tools/license-issuer/private-key.json
-tools/license-issuer/keys.js
+# Seller Code Issuer — local PC only, never publish to GitHub
+tools/license-issuer/

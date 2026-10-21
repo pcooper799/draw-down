@@ -25,15 +25,14 @@ Packaged Windows builds open on an activation screen until a valid code is enter
 
 ### Issue a code (seller)
 
-Activation codes are **Ed25519-signed** (`DD2…`). The customer app ships only the public key; the private key lives in your seller Code Issuer. Legacy `DD1…` HMAC codes still activate if you have any outstanding.
+Activation codes are **Ed25519-signed** (`DD2…`). The customer app ships only the public key.
 
-**On your Windows PC (recommended)** — download `Draw-Down-Code-Issuer.zip` from the latest GitHub Release, unzip it, then double-click `Open-Code-Issuer.bat`. Keep that zip private (it contains the signing key).
+**Code Issuer is local-only** — it must never be published on GitHub Releases or in the public repo. Keep the issuer folder/zip on your PC only (it holds the private signing key). Legacy `DD1…` HMAC codes still activate if you have any outstanding.
 
-Or from this repo:
+On the machine that has the private issuer tooling:
 
 ```bash
-npm run license:keys    # once — writes public key + seller private key files
-npm run license:ui      # on-screen issuer at http://127.0.0.1:43129/
+npm run license:keys    # once — creates seller private key + public key for the app
 npm run license:issue -- --label "Friday gala"
 ```
 
@@ -119,8 +118,8 @@ The download page (`website/index.html`) auto-resolves the latest Release assets
 | --- | --- |
 | `npm run electron:dev` | Dev server + Electron |
 | `npm run typecheck` | TypeScript check |
-| `npm run license:ui` | Local offline on-screen activation code issuer |
-| `npm run license:issue` | Generate a paid 48-hour activation code (CLI) |
+| `npm run license:keys` | Create Ed25519 keypair (seller machine only) |
+| `npm run license:issue` | Generate a paid 48-hour activation code (CLI, seller machine) |
 | `npm run test:gameplay` | Run draw/insurance invariant checks |
 | `npm run dist` / `dist:win` | Build Windows NSIS + portable installers |
 | `npm run release:repo -- owner/repo` | One-time rewrite of GitHub publish placeholders |
