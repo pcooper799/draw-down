@@ -7,6 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { formatTicket } from '@/lib/utils'
 import type { DrawEvent, Ticket } from '@/types'
 
@@ -18,6 +20,9 @@ type Props = {
   pool: Ticket[]
   lastDrawn: DrawEvent | null
   digits: number
+  stopAt: number
+  onContinueWithStop: (stopAt: number) => boolean
+  onResumeDraw: () => void
 }
 
 export function FinishCelebration({
@@ -28,11 +33,45 @@ export function FinishCelebration({
   pool,
   lastDrawn,
   digits,
+  stopAt,
+  onContinueWithStop,
+  onResumeDraw,
 }: Props) {
   const remainingCount = pool.length
   const lastTicket = lastDrawn?.ticket ?? null
   const wasReturned = lastDrawn?.outcome === 'returned'
   const wasOut = lastDrawn?.outcome === 'eliminated'
+  const canContinue = remainingCount > 1
+  const maxNextStop = Math.max(1, remainingCount - 1)
+  const defaultNext = Math.min(stopAt > 0 ? Math.min(stopAt, maxNextStop) : 1, maxNextStop)
+  const [nextStopDraft, setNextStopDraft] = useState(String(defaultNext))
+  const [continueError, setContinueError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    setNextStopDraft(String(Math.min(Math.max(1, stopAt === remainingCount ? 1 : stopAt), maxNextStop)))
+    setContinueError(null)
+  }, [open, stopAt, remainingCount, maxNextStop])
+
+  const handleContinueDraw = () => {
+    const parsed = Number.parseInt(nextStopDraft, 10)
+    if (!Number.isFinite(parsed)) {
+      setContinueError('Enter a valid stop number')
+      return
+    }
+    const next = Math.floor(parsed)
+    if (next < 1 || next > maxNextStop) {
+      setContinueError(`Stop must be between 1 and ${maxNextStop}`)
+      return
+    }
+    const ok = onContinueWithStop(next)
+    if (!ok) {
+      setContinueError(`Need a stop below ${remainingCount} remaining`)
+      return
+    }
+    onOpenChange(false)
+    onResumeDraw()
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,10 +86,10 @@ export function FinishCelebration({
           )}
           <DialogHeader className="items-center text-center sm:text-center">
             <DialogTitle className="font-display text-3xl tracking-wide text-[var(--accent)] sm:text-4xl">
-              Draw complete
+              {canContinue ? 'Stop reached' : 'Draw complete'}
             </DialogTitle>
             <DialogDescription className="text-base text-[var(--ink-muted)]">
-              {orgName} · last ticket drawn
+              {orgName} · {canContinue ? 'prize break — continue when ready' : 'last ticket drawn'}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -90,10 +129,49 @@ export function FinishCelebration({
 
           <p className="text-center text-sm text-[var(--ink-muted)]">
             {remainingCount} ticket{remainingCount === 1 ? '' : 's'} still in the draw
+            {canContinue ? ` · stopped at ${stopAt}` : ''}
           </p>
 
-          <Button type="button" className="w-full" size="lg" onClick={() => onOpenChange(false)}>
-            Continue
+          {canContinue && (
+            <div className="space-y-3 border border-[var(--line)] bg-[var(--panel-elevated)]/80 p-3">
+              <div className="space-y-2">
+                <Label htmlFor="next-stop">Next stop when remaining</Label>
+                <Input
+                  id="next-stop"
+                  inputMode="numeric"
+                  value={nextStopDraft}
+                  onChange={(e) => {
+                    setNextStopDraft(e.target.value)
+                    setContinueError(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      handleContinueDraw()
+                    }
+                  }}
+                />
+                <p className="text-xs text-[var(--ink-faint)]">
+                  For the next prize tier. Must be 1–{maxNextStop} (below current remaining).
+                </p>
+                {continueError && (
+                  <p className="text-xs text-[var(--danger)]">{continueError}</p>
+                )}
+              </div>
+              <Button type="button" className="w-full" size="lg" onClick={handleContinueDraw}>
+                Continue draw to that stop
+              </Button>
+            </div>
+          )}
+
+          <Button
+            type="button"
+            variant={canContinue ? 'secondary' : 'default'}
+            className="w-full"
+            size="lg"
+            onClick={() => onOpenChange(false)}
+          >
+            {canContinue ? 'Stay stopped for now' : 'Continue'}
           </Button>
         </div>
       </DialogContent>
@@ -101,7 +179,7 @@ export function FinishCelebration({
   )
 }
 
-/** Opens automatically once when status becomes finished; closes after reset. */
+/** Opens automatically once when status becomes finished; closes after reset/continue. */
 export function useFinishCelebration(status: string) {
   const [open, setOpen] = useState(false)
 

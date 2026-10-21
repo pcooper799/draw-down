@@ -150,18 +150,54 @@ export function useDrawSession() {
   const insuredRemaining = useMemo(() => pool.filter((t) => t.insured).length, [pool])
   const digits = String(Math.max(config.totalTickets, 1)).length
 
-  const applyConfig = useCallback((next: Partial<SessionConfig>) => {
-    setConfig((prev) => {
-      const merged = { ...prev, ...next }
-      merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
-      merged.totalTickets = clampTotalTickets(merged.totalTickets, merged.stopAt)
-      merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
-      merged.paceMs = clampPaceMs(merged.paceMs)
-      if (!merged.orgName?.trim()) merged.orgName = prev.orgName
-      configRef.current = merged
-      return merged
-    })
-  }, [])
+  const applyConfig = useCallback(
+    (next: Partial<SessionConfig>) => {
+      setConfig((prev) => {
+        const merged = { ...prev, ...next }
+        merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
+        merged.totalTickets = clampTotalTickets(merged.totalTickets, merged.stopAt)
+        merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
+        merged.paceMs = clampPaceMs(merged.paceMs)
+        if (!merged.orgName?.trim()) merged.orgName = prev.orgName
+        configRef.current = merged
+        return merged
+      })
+
+      const rem = poolRef.current.length
+      const stop = configRef.current.stopAt
+      // Prize tiers: lower stop-at after a stop so the draw can continue.
+      if (statusRef.current === 'finished' && rem > stop) {
+        statusRef.current = 'paused'
+        setStatus('paused')
+        setSaveNotice(`Ready to continue — next stop at ${stop} remaining`)
+      } else if (
+        rem <= stop &&
+        (statusRef.current === 'running' || statusRef.current === 'paused')
+      ) {
+        clearTimer()
+        drawLockRef.current = false
+        statusRef.current = 'finished'
+        setStatus('finished')
+      }
+    },
+    [clearTimer],
+  )
+
+  /** Set a new stop-at (e.g. next prize) and reopen a finished draw when possible. */
+  const continueWithNewStop = useCallback(
+    (stopAt: number) => {
+      if (statusRef.current === 'running') return false
+      const rem = poolRef.current.length
+      const nextStop = clampStopAt(stopAt, configRef.current.totalTickets)
+      if (rem <= nextStop) {
+        setSaveNotice(`Need a stop below ${rem} remaining to keep drawing`)
+        return false
+      }
+      applyConfig({ stopAt: nextStop })
+      return true
+    },
+    [applyConfig],
+  )
 
   const syncInsuranceIntoPool = useCallback((marks: Set<number>) => {
     setPool((prev) => {
@@ -617,6 +653,7 @@ export function useDrawSession() {
     start,
     pause,
     resetSession,
+    continueWithNewStop,
     setTicketInsured,
     clearAllInsurance,
     toggleTicketHold,

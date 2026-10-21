@@ -159,6 +159,25 @@ assert(
   hasLiveEventProgress({ status: 'idle', eliminatedCount: 0, historyCount: 0, heldOutCount: 1 }),
   null,
 )
+
+{
+  // Prize-tier continue: stop at 3 remaining, then lower stop to 1 and resume.
+  let remaining = 3
+  let stopAt = 3
+  let status = 'finished'
+  const tryContinue = (nextStop) => {
+    if (remaining <= nextStop) return false
+    stopAt = nextStop
+    status = 'paused'
+    return true
+  }
+  assert('cannot continue at same stop', !tryContinue(3) && status === 'finished', { remaining, stopAt, status })
+  assert('can continue with lower stop', tryContinue(1) && status === 'paused' && stopAt === 1, {
+    remaining,
+    stopAt,
+    status,
+  })
+}
 assert(
   'prune drops out-of-range and eliminated',
   [...pruneInsuranceMarks([1, 3, 99], 10, [1])].join(',') === '3',

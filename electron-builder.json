@@ -63,6 +63,7 @@
     "uninstallerIcon": "build/icon.ico",
     "installerHeaderIcon": "build/icon.ico",
     "uninstallDisplayName": "Draw Down",
+    "runAfterFinish": true,
     "artifactName": "${productName}-${version}-win-${arch}.${ext}"
   },
   "portable": {

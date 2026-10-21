@@ -109,7 +109,7 @@ export default function App() {
         event.preventDefault()
         if (status === 'running') {
           pause()
-        } else if (status === 'paused' || status === 'idle') {
+        } else if (status === 'paused' || status === 'idle' || status === 'finished') {
           if (remaining > config.stopAt) {
             start()
           }
@@ -201,6 +201,12 @@ export default function App() {
         pool={session.pool}
         lastDrawn={session.lastDrawn}
         digits={session.digits}
+        stopAt={session.config.stopAt}
+        onContinueWithStop={session.continueWithNewStop}
+        onResumeDraw={() => {
+          // start() reads configRef — safe right after continueWithNewStop
+          session.start()
+        }}
       />
 
       {renewOpen && !license.licensed && (

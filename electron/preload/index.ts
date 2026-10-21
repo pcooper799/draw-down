@@ -1,7 +1,21 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
+
+export type InstallInfo = {
+  packaged: boolean
+  platform: NodeJS.Platform
+  canUninstall: boolean
+  installDir: string | null
+}
+
+export type UninstallResult = {
+  ok: boolean
+  reason?: string
+}
 
 contextBridge.exposeInMainWorld('drawDown', {
-  platform: process.platform,
+  platform: process.platform as NodeJS.Platform,
+  getInstallInfo: (): Promise<InstallInfo> => ipcRenderer.invoke('draw-down:get-install-info'),
+  uninstall: (): Promise<UninstallResult> => ipcRenderer.invoke('draw-down:uninstall'),
 })
 
 function domReady(condition: DocumentReadyState[] = ['complete', 'interactive']) {

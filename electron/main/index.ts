@@ -1,4 +1,6 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
+import { spawn } from 'node:child_process'
+import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -38,6 +40,95 @@ function resolveAppIcon() {
   return process.platform === 'win32' ? buildIco : publicIco
 }
 
+/** NSIS uninstaller next to the installed executable (Windows installer builds only). */
+function findUninstaller(): string | null {
+  if (process.platform !== 'win32' || !app.isPackaged) return null
+  const installDir = path.dirname(process.execPath)
+  const candidates = [
+    path.join(installDir, 'Uninstall Draw Down.exe'),
+    path.join(installDir, `Uninstall ${app.getName()}.exe`),
+    path.join(installDir, 'uninstall.exe'),
+  ]
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate
+    } catch {
+      // ignore
+    }
+  }
+  return null
+}
+
+function getInstallInfo() {
+  const uninstaller = findUninstaller()
+  return {
+    packaged: app.isPackaged,
+    platform: process.platform as NodeJS.Platform,
+    canUninstall: Boolean(uninstaller),
+    installDir: app.isPackaged ? path.dirname(process.execPath) : null,
+  }
+}
+
+async function launchUninstaller(): Promise<{ ok: boolean; reason?: string }> {
+  const uninstaller = findUninstaller()
+  if (!uninstaller) {
+    return {
+      ok: false,
+      reason: app.isPackaged
+        ? 'Uninstaller not found. Use Windows Settings → Apps to remove Draw Down, or delete the portable folder.'
+        : 'Uninstall is available in the installed Windows app (NSIS installer), not in portable/dev mode.',
+    }
+  }
+
+  try {
+    // Detach so the uninstaller can close this process and finish removal.
+    const child = spawn(uninstaller, [], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    })
+    child.unref()
+    setTimeout(() => {
+      app.quit()
+    }, 400)
+    return { ok: true }
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : 'Could not start uninstaller',
+    }
+  }
+}
+
+function buildAppMenu() {
+  const canUninstall = Boolean(findUninstaller())
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Draw Down',
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        ...(canUninstall
+          ? [
+              {
+                label: 'Uninstall Draw Down…',
+                click: () => {
+                  void launchUninstaller()
+                },
+              } satisfies Electron.MenuItemConstructorOptions,
+              { type: 'separator' as const },
+            ]
+          : []),
+        process.platform === 'darwin' ? { role: 'close' as const } : { role: 'quit' as const },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 async function createWindow() {
   win = new BrowserWindow({
     title: 'Draw Down',
@@ -71,7 +162,13 @@ async function createWindow() {
   })
 }
 
-app.whenReady().then(createWindow)
+ipcMain.handle('draw-down:get-install-info', () => getInstallInfo())
+ipcMain.handle('draw-down:uninstall', () => launchUninstaller())
+
+app.whenReady().then(() => {
+  buildAppMenu()
+  void createWindow()
+})
 
 app.on('window-all-closed', () => {
   win = null
@@ -90,6 +187,6 @@ app.on('activate', () => {
   if (allWindows.length) {
     allWindows[0].focus()
   } else {
-    createWindow()
+    void createWindow()
   }
 })

@@ -9,6 +9,7 @@ import {
   Save,
   Settings2,
   Download,
+  Trash2,
 } from 'lucide-react'
 import { InsuranceManager } from '@/components/InsuranceManager'
 import { Button } from '@/components/ui/button'
@@ -50,6 +51,7 @@ export function OperatorPanel({
     start,
     pause,
     resetSession,
+    continueWithNewStop,
     history,
     digits,
     remaining,
@@ -62,6 +64,7 @@ export function OperatorPanel({
 
   const locked = status === 'running' || controlsLocked
   const drawLocked = status === 'running'
+  const canResumePastStop = remaining > config.stopAt
   const fileRef = useRef<HTMLInputElement>(null)
   const loadRef = useRef<HTMLInputElement>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -69,6 +72,31 @@ export function OperatorPanel({
   const [stopDraft, setStopDraft] = useState(String(config.stopAt))
   const [orgDraft, setOrgDraft] = useState(config.orgName)
   const [paceDraft, setPaceDraft] = useState((config.paceMs / 1000).toFixed(1))
+  const [prizeStopDraft, setPrizeStopDraft] = useState('1')
+  const [uninstallBusy, setUninstallBusy] = useState(false)
+  const [uninstallMessage, setUninstallMessage] = useState<string | null>(null)
+  const [canUninstall, setCanUninstall] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const api = window.drawDown
+    if (!api?.getInstallInfo) {
+      setCanUninstall(false)
+      return
+    }
+    void api.getInstallInfo().then((info) => {
+      if (!cancelled) setCanUninstall(Boolean(info.canUninstall))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (status !== 'finished') return
+    const maxNext = Math.max(1, remaining - 1)
+    setPrizeStopDraft(String(Math.min(1, maxNext)))
+  }, [status, remaining])
 
   const paceSeconds = config.paceMs / 1000
 
@@ -179,6 +207,7 @@ export function OperatorPanel({
                 <DialogTitle>Session setup</DialogTitle>
                 <DialogDescription>
                   Configure the pool before you go live. Changing ticket count resets the draw.
+                  After a stop, lower “Stop when remaining” to continue for the next prize.
                   Values save when you close this dialog. Max {MAX_TICKETS} tickets.
                 </DialogDescription>
               </DialogHeader>
@@ -248,6 +277,45 @@ export function OperatorPanel({
                 >
                   Save & close
                 </Button>
+                <div className="space-y-2 border-t border-[var(--line)] pt-4">
+                  <p className="text-xs text-[var(--ink-faint)]">
+                    Remove this app from the PC. Uses the Windows uninstaller from the NSIS install.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    className="w-full"
+                    disabled={uninstallBusy}
+                    onClick={() => {
+                      void (async () => {
+                        setUninstallBusy(true)
+                        setUninstallMessage(null)
+                        const api = window.drawDown
+                        if (!api?.uninstall) {
+                          setUninstallMessage(
+                            'Uninstall runs from the installed Windows app (not portable/browser).',
+                          )
+                          setUninstallBusy(false)
+                          return
+                        }
+                        const result = await api.uninstall()
+                        if (!result.ok) {
+                          setUninstallMessage(
+                            result.reason ??
+                              'Could not open the uninstaller. Use Windows Settings → Apps if needed.',
+                          )
+                          setUninstallBusy(false)
+                        }
+                      })()
+                    }}
+                  >
+                    <Trash2 />
+                    {canUninstall ? 'Uninstall Draw Down…' : 'Uninstall (Windows install)'}
+                  </Button>
+                  {uninstallMessage && (
+                    <p className="text-xs text-[var(--danger)]">{uninstallMessage}</p>
+                  )}
+                </div>
               </div>
             </DialogContent>
           </Dialog>
@@ -345,12 +413,12 @@ export function OperatorPanel({
                 className="col-span-2"
                 size="lg"
                 onClick={start}
-                disabled={
-                  controlsLocked || status === 'finished' || remaining <= config.stopAt
-                }
+                disabled={controlsLocked || !canResumePastStop}
               >
                 <Play />
-                {status === 'paused' ? 'Resume' : 'Start'}
+                {status === 'paused' || (status === 'finished' && canResumePastStop)
+                  ? 'Resume'
+                  : 'Start'}
               </Button>
             )}
             <Button
@@ -370,9 +438,45 @@ export function OperatorPanel({
             </p>
           )}
           {status === 'finished' && (
-            <p className="border border-[var(--accent)]/40 bg-[rgba(232,168,56,0.1)] px-3 py-2 text-sm text-[var(--accent)]">
-              Draw complete — {remaining} ticket{remaining === 1 ? '' : 's'} remain.
-            </p>
+            <div className="space-y-3 border border-[var(--accent)]/40 bg-[rgba(232,168,56,0.1)] px-3 py-3">
+              <p className="text-sm text-[var(--accent)]">
+                Stopped at {config.stopAt} remaining — {remaining} ticket
+                {remaining === 1 ? '' : 's'} still in.
+              </p>
+              {remaining > 1 ? (
+                <div className="space-y-2">
+                  <Label htmlFor="prize-stop">Next prize stop</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="prize-stop"
+                      inputMode="numeric"
+                      value={prizeStopDraft}
+                      disabled={controlsLocked}
+                      onChange={(e) => setPrizeStopDraft(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      disabled={controlsLocked}
+                      onClick={() => {
+                        const parsed = Number.parseInt(prizeStopDraft, 10)
+                        if (!Number.isFinite(parsed)) return
+                        if (continueWithNewStop(parsed)) {
+                          start()
+                        }
+                      }}
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                  <p className="text-xs text-[var(--ink-faint)]">
+                    Set a lower stop (1–{Math.max(1, remaining - 1)}) for the next prize, then keep
+                    drawing.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--ink-faint)]">Final stop — reset to start a new event.</p>
+              )}
+            </div>
           )}
         </section>
 
