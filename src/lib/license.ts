@@ -6,7 +6,10 @@
  *
  * Legacy: DD1… HMAC codes still verify for older activations.
  *
- * On successful activation the app is usable for 48 hours from activation time.
+ * On successful activation, live drawings are unlocked for 48 hours from
+ * activation time. After expiry, organizers can still open the app to review
+ * audit logs, verify results, and export reports — only starting or resuming
+ * a live draw requires a new code.
  */
 
 import * as ed from '@noble/ed25519'
@@ -199,6 +202,19 @@ export function getLicenseStatus(now = Date.now()): LicenseStatus {
   if (!Number.isFinite(expires)) return { state: 'invalid', reason: 'Saved license is corrupt.' }
   if (now >= expires) return { state: 'expired', expiresAt: record.expiresAt }
   return { state: 'active', expiresAt: record.expiresAt, remainingMs: expires - now }
+}
+
+/** Live start/resume/continue — requires an active (non-expired) license. */
+export function canRunLiveDrawings(status: LicenseStatus): boolean {
+  return status.state === 'active'
+}
+
+/**
+ * After a prior activation expires, organizers keep read/verify/export access.
+ * Fresh installs (missing) and corrupt records still need a code to enter.
+ */
+export function canOpenInReviewMode(status: LicenseStatus): boolean {
+  return status.state === 'expired' || status.state === 'active'
 }
 
 export async function activateLicenseCode(code: string, now = Date.now()) {

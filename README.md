@@ -2,7 +2,7 @@
 
 Windows desktop event software for ticket draw-downs. Tickets leave the pool one at a time at a staged pace until a configurable number remain. Insured tickets return to the pool after being drawn.
 
-Paid software: each customer activates with a code that unlocks **48 hours** of use on that computer.
+Paid software: each customer activates with a code that unlocks **48 hours** of live drawing on that computer. After expiry they can still open the app to review audit logs, verify results, and export reports — only starting or resuming a live draw needs a new code.
 
 ## Stack
 
@@ -21,7 +21,11 @@ npm run electron:dev
 
 ## Paid activation (48 hours)
 
-Packaged Windows builds open on an activation screen until a valid code is entered. Access starts at activation and lasts **48 hours**, then the app asks for a new code.
+Packaged Windows builds open on an activation screen until a valid code is entered (first use). Activation unlocks **live drawing for 48 hours**. When that window ends, the app stays open in **review mode**: organizers can read audit history, run verification, and export JSON/CSV/PDF reports without buying another code. Starting or resuming a live draw requires a new activation.
+
+### Pricing (seller guidance)
+
+A practical starting range to test is about **$25–$50 per activation**, depending on how polished the finished build feels for your events. Adjust after real customer feedback.
 
 ### Issue a code (seller)
 

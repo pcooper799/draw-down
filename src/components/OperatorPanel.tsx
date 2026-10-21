@@ -37,8 +37,15 @@ type Props = {
   licenseBadge?: ReactNode
   /** When true, block start/reset/setup that would continue an unlicensed event. */
   controlsLocked?: boolean
+  /**
+   * When true, block audit verify/export/import. Defaults to false so expired
+   * licenses can still review and verify past drawings.
+   */
+  auditLocked?: boolean
   /** Wipe activation + local session on this PC (does not refund a code). */
   onClearActivation?: () => void
+  /** Open the activation overlay to enter a new code. */
+  onRequestActivation?: () => void
   /** True when this panel is already in its own window. */
   separateWindow?: boolean
   /** Pop operator into a second window (stage stays clear). */
@@ -52,7 +59,9 @@ export function OperatorPanel({
   onEnterProjection,
   licenseBadge,
   controlsLocked = false,
+  auditLocked = false,
   onClearActivation,
+  onRequestActivation,
   separateWindow = false,
   onOpenOperatorWindow,
   onFocusStage,
@@ -500,9 +509,17 @@ export function OperatorPanel({
             </Button>
           </div>
           {controlsLocked && (
-            <p className="border border-[var(--danger)]/40 bg-[rgba(211,90,74,0.1)] px-3 py-2 text-sm text-[var(--danger)]">
-              License expired — enter a new code to resume the draw.
-            </p>
+            <div className="space-y-2 border border-[var(--danger)]/40 bg-[rgba(211,90,74,0.1)] px-3 py-2 text-sm text-[var(--danger)]">
+              <p>
+                License expired — starting or resuming a live draw requires a new code. Audit
+                history, verification, and exports stay available below.
+              </p>
+              {onRequestActivation && (
+                <Button type="button" size="sm" variant="secondary" onClick={onRequestActivation}>
+                  Enter activation code
+                </Button>
+              )}
+            </div>
           )}
           {status === 'finished' && (
             <div className="space-y-3 border border-[var(--accent)]/40 bg-[rgba(232,168,56,0.1)] px-3 py-3">
@@ -559,7 +576,7 @@ export function OperatorPanel({
         </section>
 
         <section className="operator-section">
-          <AuditPanel session={session} locked={controlsLocked} />
+          <AuditPanel session={session} locked={auditLocked} />
         </section>
 
         <section className="operator-section space-y-2">

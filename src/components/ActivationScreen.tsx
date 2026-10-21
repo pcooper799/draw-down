@@ -61,8 +61,8 @@ export function ActivationScreen({
         <p className="font-display text-3xl tracking-wide text-[var(--ink)]">DRAW DOWN</p>
         <p className="mt-2 text-sm text-[var(--ink-muted)]">
           {variant === 'overlay'
-            ? 'Enter a new code to resume this event — your draw is paused and saved'
-            : 'Paid event license · 48 hours of use per activation code'}
+            ? 'Enter a new code to start or resume a live draw. Audit logs and verification stay available without renewing.'
+            : 'Paid event license · 48 hours of live drawing per activation code'}
         </p>
       </div>
 
@@ -102,8 +102,8 @@ export function ActivationScreen({
       <p className="mt-5 flex items-start gap-2 text-xs leading-relaxed text-[var(--ink-faint)]">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[var(--safe)]" />
         {variant === 'overlay'
-          ? 'The ticket board and session stay on this computer while you renew.'
-          : 'Enter the code you purchased. Access starts when you activate and lasts 48 hours on this computer.'}
+          ? 'Your board, session, and audit history stay on this computer. Close this to keep reviewing without renewing.'
+          : 'Enter the code you purchased. Live drawing is unlocked for 48 hours from activation. After that you can still open past events to verify and export reports.'}
       </p>
     </div>
   )
@@ -127,7 +127,11 @@ export function ActivationScreen({
 
 export function LicenseBadge({ status }: { status: LicenseStatus }) {
   if (status.state === 'expired') {
-    return <p className="text-[0.65rem] text-[var(--danger)]">License expired</p>
+    return (
+      <p className="text-[0.65rem] text-[var(--danger)]">
+        Expired · review mode (draws locked)
+      </p>
+    )
   }
   if (status.state !== 'active') return null
   return (

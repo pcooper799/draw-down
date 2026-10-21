@@ -21,6 +21,8 @@ type Props = {
   lastDrawn: DrawEvent | null
   digits: number
   stopAt: number
+  /** When true, hide continue-to-next-stop (expired license / review mode). */
+  drawLocked?: boolean
   onContinueWithStop: (stopAt: number) => boolean
   onResumeDraw: () => void
 }
@@ -34,6 +36,7 @@ export function FinishCelebration({
   lastDrawn,
   digits,
   stopAt,
+  drawLocked = false,
   onContinueWithStop,
   onResumeDraw,
 }: Props) {
@@ -41,7 +44,8 @@ export function FinishCelebration({
   const lastTicket = lastDrawn?.ticket ?? null
   const wasReturned = lastDrawn?.outcome === 'returned'
   const wasOut = lastDrawn?.outcome === 'eliminated'
-  const canContinue = remainingCount > 1
+  const hasMoreTickets = remainingCount > 1
+  const canContinue = hasMoreTickets && !drawLocked
   const maxNextStop = Math.max(1, remainingCount - 1)
   const defaultNext = Math.min(stopAt > 0 ? Math.min(stopAt, maxNextStop) : 1, maxNextStop)
   const [nextStopDraft, setNextStopDraft] = useState(String(defaultNext))
@@ -86,10 +90,15 @@ export function FinishCelebration({
           )}
           <DialogHeader className="items-center text-center sm:text-center">
             <DialogTitle className="font-display text-3xl tracking-wide text-[var(--accent)] sm:text-4xl">
-              {canContinue ? 'Stop reached' : 'Draw complete'}
+              {hasMoreTickets ? 'Stop reached' : 'Draw complete'}
             </DialogTitle>
             <DialogDescription className="text-base text-[var(--ink-muted)]">
-              {orgName} · {canContinue ? 'prize break — continue when ready' : 'last ticket drawn'}
+              {orgName} ·{' '}
+              {drawLocked && hasMoreTickets
+                ? 'prize break — enter a new code to continue the draw'
+                : canContinue
+                  ? 'prize break — continue when ready'
+                  : 'last ticket drawn'}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -129,8 +138,15 @@ export function FinishCelebration({
 
           <p className="text-center text-sm text-[var(--ink-muted)]">
             {remainingCount} ticket{remainingCount === 1 ? '' : 's'} still in the draw
-            {canContinue ? ` · stopped at ${stopAt}` : ''}
+            {hasMoreTickets ? ` · stopped at ${stopAt}` : ''}
           </p>
+
+          {drawLocked && hasMoreTickets && (
+            <p className="border border-[var(--danger)]/40 bg-[rgba(211,90,74,0.1)] px-3 py-2 text-center text-sm text-[var(--danger)]">
+              License expired — you can close this and use Audit & verification. Enter a new code to
+              resume the live draw.
+            </p>
+          )}
 
           {canContinue && (
             <div className="space-y-3 border border-[var(--line)] bg-[var(--panel-elevated)]/80 p-3">
@@ -171,7 +187,7 @@ export function FinishCelebration({
             size="lg"
             onClick={() => onOpenChange(false)}
           >
-            {canContinue ? 'Stay stopped for now' : 'Continue'}
+            {canContinue ? 'Stay stopped for now' : drawLocked && hasMoreTickets ? 'Close' : 'Continue'}
           </Button>
         </div>
       </DialogContent>

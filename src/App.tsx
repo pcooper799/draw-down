@@ -7,7 +7,12 @@ import { StageDisplay } from '@/components/StageDisplay'
 import { Button } from '@/components/ui/button'
 import { useDrawSession, type DrawSession } from '@/hooks/useDrawSession'
 import { hasLiveEventProgress } from '@/lib/drawRules'
-import { clearLicenseRecord, getLicenseStatus, type LicenseStatus } from '@/lib/license'
+import {
+  canOpenInReviewMode,
+  clearLicenseRecord,
+  getLicenseStatus,
+  type LicenseStatus,
+} from '@/lib/license'
 import {
   focusStageWindowElectron,
   openOperatorWindowElectron,
@@ -93,9 +98,12 @@ function useCommandRunner(
   session: DrawSession,
   licenseRefresh: () => void,
   enabled: boolean,
+  liveDrawAllowed: boolean,
 ) {
   const sessionRef = useRef(session)
   sessionRef.current = session
+  const liveRef = useRef(liveDrawAllowed)
+  liveRef.current = liveDrawAllowed
 
   useEffect(() => {
     if (!enabled) return
@@ -103,37 +111,39 @@ function useCommandRunner(
       if (msg.kind !== 'cmd') return
       const s = sessionRef.current
       const cmd = msg.cmd
+      const liveOk = liveRef.current
       switch (cmd.type) {
         case 'start':
-          s.start()
+          if (liveOk) s.start()
           break
         case 'pause':
           s.pause()
           break
         case 'reset':
-          s.resetSession()
+          if (liveOk) s.resetSession()
           break
         case 'save':
           s.saveNow()
           break
         case 'toggleHold':
-          s.toggleTicketHold(cmd.ticket)
+          if (liveOk) s.toggleTicketHold(cmd.ticket)
           break
         case 'setTicketInsured':
-          s.setTicketInsured(cmd.ticket, cmd.insured)
+          if (liveOk) s.setTicketInsured(cmd.ticket, cmd.insured)
           break
         case 'clearAllInsurance':
-          s.clearAllInsurance()
+          if (liveOk) s.clearAllInsurance()
           break
         case 'continueWithNewStop': {
+          if (!liveOk) break
           if (s.continueWithNewStop(cmd.stopAt) && cmd.resume) s.start()
           break
         }
         case 'applyConfig':
-          s.applyConfig(cmd.patch)
+          if (liveOk) s.applyConfig(cmd.patch)
           break
         case 'commitTotalTickets':
-          s.commitTotalTickets(cmd.total)
+          if (liveOk) s.commitTotalTickets(cmd.total)
           break
         case 'clearActivation':
           clearLicenseRecord()
@@ -179,10 +189,13 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
     heldOutCount: session.heldOut.length,
   })
 
-  const hardBlocked = !license.licensed && !liveEvent
+  // Expired licenses keep audit/verify access; only missing/invalid block entry.
+  const hardBlocked =
+    !license.licensed && !liveEvent && !canOpenInReviewMode(license.status)
+  const reviewMode = !license.licensed && canOpenInReviewMode(license.status)
 
   usePublishSession(session, license.status, true)
-  useCommandRunner(session, license.refresh, true)
+  useCommandRunner(session, license.refresh, true, license.licensed)
 
   useEffect(() => {
     if (license.licensed) {
@@ -193,8 +206,8 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
       pause()
       saveNow()
     }
-    if (liveEvent) setRenewOpen(true)
-  }, [license.licensed, liveEvent, status, pause, saveNow])
+    // Do not force the activation overlay — organizers may only need audit/verify.
+  }, [license.licensed, status, pause, saveNow])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -289,14 +302,27 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
       onFocusStage={operatorOnly ? () => void focusStageWindowElectron() : undefined}
       licenseBadge={<LicenseBadge status={license.status} />}
       controlsLocked={!license.licensed}
+      auditLocked={false}
       onClearActivation={() => {
         clearLicenseRecord()
         session.discardAutosave()
         session.resetSession()
         license.refresh()
       }}
+      onRequestActivation={() => setRenewOpen(true)}
     />
   )
+
+  const expiryBanner = reviewMode ? (
+    <div className="flex items-center justify-center gap-3 border-b border-[var(--danger)]/50 bg-[rgba(80,20,16,0.92)] px-3 py-2 text-sm">
+      <span>
+        License expired — live draws locked. Audit logs, verification, and reports stay available.
+      </span>
+      <Button type="button" size="sm" variant="secondary" onClick={() => setRenewOpen(true)}>
+        Enter code
+      </Button>
+    </div>
+  ) : null
 
   if (operatorOnly) {
     return (
@@ -306,14 +332,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
             Dev mode · license gate skipped · operator window
           </div>
         )}
-        {!license.licensed && liveEvent && (
-          <div className="flex items-center justify-center gap-3 border-b border-[var(--danger)]/50 bg-[rgba(80,20,16,0.92)] px-3 py-2 text-sm">
-            <span>License expired — draw paused.</span>
-            <Button type="button" size="sm" variant="secondary" onClick={() => setRenewOpen(true)}>
-              Enter code
-            </Button>
-          </div>
-        )}
+        {expiryBanner}
         <div className="min-h-0 flex-1">{panel}</div>
         <FinishCelebration
           open={finish.open}
@@ -324,6 +343,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
           lastDrawn={session.lastDrawn}
           digits={session.digits}
           stopAt={session.config.stopAt}
+          drawLocked={!license.licensed}
           onContinueWithStop={session.continueWithNewStop}
           onResumeDraw={() => session.start()}
         />
@@ -335,7 +355,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
               setRenewOpen(false)
             }}
             variant="overlay"
-            onDismiss={liveEvent ? () => setRenewOpen(false) : undefined}
+            onDismiss={() => setRenewOpen(false)}
           />
         )}
       </div>
@@ -350,13 +370,8 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         </div>
       )}
 
-      {!license.licensed && liveEvent && (
-        <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-center gap-3 border-b border-[var(--danger)]/50 bg-[rgba(80,20,16,0.92)] px-3 py-2 text-sm text-[var(--ink)]">
-          <span>License expired — draw paused. Enter a new code to continue.</span>
-          <Button type="button" size="sm" variant="secondary" onClick={() => setRenewOpen(true)}>
-            Enter code
-          </Button>
-        </div>
+      {reviewMode && (
+        <div className="absolute inset-x-0 top-0 z-40 text-[var(--ink)]">{expiryBanner}</div>
       )}
 
       <StageDisplay
@@ -414,6 +429,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         lastDrawn={session.lastDrawn}
         digits={session.digits}
         stopAt={session.config.stopAt}
+        drawLocked={!license.licensed}
         onContinueWithStop={session.continueWithNewStop}
         onResumeDraw={() => session.start()}
       />
@@ -426,7 +442,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
             setRenewOpen(false)
           }}
           variant="overlay"
-          onDismiss={liveEvent ? () => setRenewOpen(false) : undefined}
+          onDismiss={() => setRenewOpen(false)}
         />
       )}
     </div>
@@ -512,7 +528,9 @@ function StageMirrorApp() {
     )
   }
 
-  if (view.license.state !== 'active' && !import.meta.env.DEV && !liveEvent) {
+  const stageNeedsActivation =
+    !licensed && !liveEvent && !canOpenInReviewMode(view.license)
+  if (stageNeedsActivation) {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-3 bg-[var(--stage)] text-[var(--ink)]">
         <p className="font-display text-3xl">Activation required</p>
@@ -569,7 +587,9 @@ function StageMirrorApp() {
         lastDrawn={view.lastDrawn}
         digits={view.digits}
         stopAt={view.config.stopAt}
+        drawLocked={!licensed}
         onContinueWithStop={(stopAt) => {
+          if (!licensed) return false
           const ok = view.remaining > stopAt
           if (ok) sendBridgeCommand({ type: 'continueWithNewStop', stopAt, resume: true })
           return ok
