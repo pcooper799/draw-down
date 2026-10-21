@@ -79,7 +79,7 @@ export function ActivationScreen({
           value={code}
           autoFocus
           spellCheck={false}
-          placeholder="DD1.xxxxx.yyyyy"
+          placeholder="DD2.xxxxx.yyyyy"
           className="font-mono text-sm"
           onChange={(e) => setCode(e.target.value)}
           onKeyDown={(e) => {

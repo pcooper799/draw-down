@@ -1,15 +1,26 @@
 /**
  * Offline activation codes for paid event use.
- * Codes are HMAC-signed. Issuing requires the same secret as verification.
+ *
+ * Preferred: DD2… codes signed with Ed25519 (private key only on the seller
+ * issuer; this app ships only the public key).
+ *
+ * Legacy: DD1… HMAC codes still verify for older activations.
  *
  * On successful activation the app is usable for 48 hours from activation time.
  */
 
+import * as ed from '@noble/ed25519'
+import { sha512 } from '@noble/hashes/sha2.js'
+import { LICENSE_PUBLIC_KEY_B64URL } from '@/lib/licensePublicKey'
+
+ed.hashes.sha512 = (...msgs) => sha512(ed.etc.concatBytes(...msgs))
+
 const STORAGE_KEY = 'draw-down.license.v1'
-/** Change this before shipping builds if you want to invalidate older generators. */
+/** Legacy HMAC secret — kept so already-issued DD1 codes still activate. */
 export const LICENSE_SECRET = 'draw-down-phillip-cooper-license-2026'
 
 const HOURS_48_MS = 48 * 60 * 60 * 1000
+const ISSUE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 
 export type LicenseRecord = {
   code: string
@@ -61,6 +72,40 @@ export type IssuedPayload = {
   n?: number
 }
 
+function parsePayload(body: string): IssuedPayload | null {
+  try {
+    const json = new TextDecoder().decode(fromBase64Url(body))
+    const payload = JSON.parse(json) as IssuedPayload
+    if (payload.v !== 1 || !Number.isFinite(payload.iat)) return null
+    return payload
+  } catch {
+    return null
+  }
+}
+
+function withinIssueWindow(payload: IssuedPayload, now: number) {
+  return now <= payload.iat * 1000 + ISSUE_WINDOW_MS
+}
+
+/** Issue a modern Ed25519-signed code (requires the seller private key). */
+export async function issueLicenseCodeEd25519(options: {
+  privateKeyB64Url: string
+  label?: string
+  now?: number
+}) {
+  const payload: IssuedPayload = {
+    v: 1,
+    iat: Math.floor((options.now ?? Date.now()) / 1000),
+    label: options.label,
+    n: Math.floor(Math.random() * 1e9),
+  }
+  const body = toBase64Url(JSON.stringify(payload))
+  const priv = fromBase64Url(options.privateKeyB64Url)
+  const sig = await ed.signAsync(new TextEncoder().encode(body), priv)
+  return `DD2.${body}.${toBase64Url(sig)}`
+}
+
+/** @deprecated Prefer Ed25519 (DD2). Kept for tooling that still mints HMAC codes. */
 export async function issueLicenseCode(options?: {
   secret?: string
   label?: string
@@ -77,37 +122,54 @@ export async function issueLicenseCode(options?: {
   return `DD1.${body}.${sig}`
 }
 
+async function verifyDd1(body: string, sig: string, secret: string) {
+  const expected = toBase64Url(await hmacSha256(secret, body))
+  return expected === sig
+}
+
+async function verifyDd2(body: string, sig: string, publicKeyB64Url: string) {
+  const pub = fromBase64Url(publicKeyB64Url)
+  const signature = fromBase64Url(sig)
+  if (signature.length !== 64 || pub.length !== 32) return false
+  return ed.verifyAsync(signature, new TextEncoder().encode(body), pub)
+}
+
 export async function verifyLicenseCode(
   code: string,
-  options?: { secret?: string; now?: number },
+  options?: { secret?: string; publicKeyB64Url?: string; now?: number },
 ): Promise<{ ok: true; payload: IssuedPayload } | { ok: false; reason: string }> {
-  const secret = options?.secret ?? LICENSE_SECRET
-  // Strip whitespace; keep body case (base64url / JSON are case-sensitive)
   const raw = code.trim().replace(/\s+/g, '')
   const parts = raw.split('.')
-  if (parts.length !== 3 || parts[0].toUpperCase() !== 'DD1') {
+  if (parts.length !== 3) {
     return { ok: false, reason: 'Code format is invalid.' }
   }
-  const [, body, sig] = parts
-  const expected = toBase64Url(await hmacSha256(secret, body))
-  if (expected !== sig) {
+  const [version, body, sig] = parts
+  const ver = version.toUpperCase()
+
+  let signedOk = false
+  if (ver === 'DD2') {
+    signedOk = await verifyDd2(body, sig, options?.publicKeyB64Url ?? LICENSE_PUBLIC_KEY_B64URL)
+  } else if (ver === 'DD1') {
+    signedOk = await verifyDd1(body, sig, options?.secret ?? LICENSE_SECRET)
+  } else {
+    return { ok: false, reason: 'Code format is invalid.' }
+  }
+
+  if (!signedOk) {
     return { ok: false, reason: 'Code is not valid.' }
   }
-  try {
-    const json = new TextDecoder().decode(fromBase64Url(body))
-    const payload = JSON.parse(json) as IssuedPayload
-    if (payload.v !== 1 || !Number.isFinite(payload.iat)) {
-      return { ok: false, reason: 'Code payload is invalid.' }
-    }
-    // Codes must be activated within 30 days of issue (prevents infinite unused codes)
-    const now = options?.now ?? Date.now()
-    if (now > payload.iat * 1000 + 30 * 24 * 60 * 60 * 1000) {
-      return { ok: false, reason: 'This code is too old to activate.' }
-    }
-    return { ok: true, payload }
-  } catch {
-    return { ok: false, reason: 'Code could not be read.' }
+
+  const payload = parsePayload(body)
+  if (!payload) {
+    return { ok: false, reason: 'Code payload is invalid.' }
   }
+
+  const now = options?.now ?? Date.now()
+  if (!withinIssueWindow(payload, now)) {
+    return { ok: false, reason: 'This code is too old to activate.' }
+  }
+
+  return { ok: true, payload }
 }
 
 export function readLicenseRecord(): LicenseRecord | null {

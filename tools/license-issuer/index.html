@@ -232,18 +232,19 @@
         <div id="latest" class="code-box empty">Generate a code to send after payment.</div>
         <p id="latestMeta" class="meta"></p>
         <p class="hint">
-          Customer gets <strong>48 hours</strong> of use starting when they activate on their PC.
-          Codes must be activated within <strong>30 days</strong> of issue. Fully offline — nothing is uploaded.
+          Codes are signed with <strong>Ed25519</strong> (DD2…). The customer app only has the public key,
+          so reverse-engineering the app cannot mint new codes. Customer gets <strong>48 hours</strong>
+          from activation. Activate within <strong>30 days</strong> of issue. Fully offline.
         </p>
 
+        <p id="keyStatus" class="meta"></p>
+
         <details class="advanced">
-          <summary>Advanced · signing secret</summary>
+          <summary>Advanced · private key status</summary>
           <p class="hint" style="margin-top: 0.65rem">
-            Must match <code>LICENSE_SECRET</code> in the app (<code>src/lib/license.ts</code>).
-            Leave default unless you changed it before shipping builds.
+            This folder must include <code>keys.js</code> (created by <code>npm run license:keys</code>).
+            Keep <code>keys.js</code> / <code>private-key.json</code> private — they mint paid codes.
           </p>
-          <label for="secret" style="margin-top: 0.5rem">Secret</label>
-          <input id="secret" type="password" spellcheck="false" autocomplete="off" />
         </details>
       </section>
 
@@ -274,36 +275,39 @@
 
     <div class="toast" id="toast" role="status">Copied</div>
 
+    <script src="./vendor/ed25519.iife.js"></script>
+    <script src="./keys.js"></script>
     <script>
-      const DEFAULT_SECRET = 'draw-down-phillip-cooper-license-2026'
       const HISTORY_KEY = 'draw-down.issuer.history.v1'
-      const SECRET_KEY = 'draw-down.issuer.secret.v1'
-
       const $ = (id) => document.getElementById(id)
       const labelEl = $('label')
       const countEl = $('count')
-      const secretEl = $('secret')
       const latestEl = $('latest')
       const latestMeta = $('latestMeta')
       const historyBody = $('historyBody')
       const toastEl = $('toast')
       const copyBtn = $('copy')
       const copyAllBtn = $('copyAll')
+      const keyStatus = $('keyStatus')
+      const generateBtn = $('generate')
 
       let lastBatch = []
+      const keys = window.DRAW_DOWN_ISSUER_KEYS
+      const ed = window.nobleEd25519
 
-      try {
-        secretEl.value = sessionStorage.getItem(SECRET_KEY) || DEFAULT_SECRET
-      } catch {
-        secretEl.value = DEFAULT_SECRET
+      if (!ed) {
+        keyStatus.textContent = 'Missing vendor/ed25519.iife.js — crypto library failed to load.'
+        keyStatus.style.color = 'var(--danger)'
+        generateBtn.disabled = true
+      } else if (!keys?.privateKey) {
+        keyStatus.textContent =
+          'Missing keys.js — run npm run license:keys in the project, then copy keys.js into this folder.'
+        keyStatus.style.color = 'var(--danger)'
+        generateBtn.disabled = true
+      } else {
+        keyStatus.textContent = 'Ed25519 private key loaded · codes will be DD2…'
+        keyStatus.style.color = 'var(--safe)'
       }
-      secretEl.addEventListener('change', () => {
-        try {
-          sessionStorage.setItem(SECRET_KEY, secretEl.value.trim() || DEFAULT_SECRET)
-        } catch {
-          // ignore
-        }
-      })
 
       function showToast(text) {
         toastEl.textContent = text
@@ -318,96 +322,26 @@
         return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
       }
 
-      // Pure JS HMAC-SHA256 so this page works offline via double-click (file://)
-      // without needing Node or a local server. Matches Node crypto / Web Crypto.
-      function sha256(bytes) {
-        const K = new Uint32Array([
-          0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-          0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-          0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-          0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-          0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-          0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-          0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-          0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2,
-        ])
-        const rotr = (x, n) => (x >>> n) | (x << (32 - n))
-        const len = bytes.length
-        const bitLen = len * 8
-        const withOne = len + 1
-        const padLen = (withOne % 64 <= 56 ? 56 : 120) - (withOne % 64)
-        const total = withOne + padLen + 8
-        const buf = new Uint8Array(total)
-        buf.set(bytes)
-        buf[len] = 0x80
-        const view = new DataView(buf.buffer)
-        view.setUint32(total - 4, bitLen >>> 0, false)
-        view.setUint32(total - 8, Math.floor(bitLen / 0x100000000), false)
-        let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a
-        let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19
-        const w = new Uint32Array(64)
-        for (let i = 0; i < total; i += 64) {
-          for (let j = 0; j < 16; j++) w[j] = view.getUint32(i + j * 4, false)
-          for (let j = 16; j < 64; j++) {
-            const s0 = rotr(w[j - 15], 7) ^ rotr(w[j - 15], 18) ^ (w[j - 15] >>> 3)
-            const s1 = rotr(w[j - 2], 17) ^ rotr(w[j - 2], 19) ^ (w[j - 2] >>> 10)
-            w[j] = (w[j - 16] + s0 + w[j - 7] + s1) >>> 0
-          }
-          let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7
-          for (let j = 0; j < 64; j++) {
-            const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)
-            const ch = (e & f) ^ (~e & g)
-            const t1 = (h + S1 + ch + K[j] + w[j]) >>> 0
-            const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)
-            const maj = (a & b) ^ (a & c) ^ (b & c)
-            const t2 = (S0 + maj) >>> 0
-            h = g; g = f; f = e; e = (d + t1) >>> 0
-            d = c; c = b; b = a; a = (t1 + t2) >>> 0
-          }
-          h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0
-          h4 = (h4 + e) >>> 0; h5 = (h5 + f) >>> 0; h6 = (h6 + g) >>> 0; h7 = (h7 + h) >>> 0
-        }
-        const out = new Uint8Array(32)
-        const ov = new DataView(out.buffer)
-        ov.setUint32(0, h0, false); ov.setUint32(4, h1, false); ov.setUint32(8, h2, false); ov.setUint32(12, h3, false)
-        ov.setUint32(16, h4, false); ov.setUint32(20, h5, false); ov.setUint32(24, h6, false); ov.setUint32(28, h7, false)
+      function fromBase64Url(value) {
+        const pad = value.length % 4 === 0 ? '' : '='.repeat(4 - (value.length % 4))
+        const b64 = value.replace(/-/g, '+').replace(/_/g, '/') + pad
+        const bin = atob(b64)
+        const out = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i)
         return out
       }
 
-      function hmacSha256(secret, message) {
-        const enc = new TextEncoder()
-        let key = enc.encode(secret)
-        if (key.length > 64) key = sha256(key)
-        const k = new Uint8Array(64)
-        k.set(key)
-        const oKey = new Uint8Array(64)
-        const iKey = new Uint8Array(64)
-        for (let i = 0; i < 64; i++) {
-          oKey[i] = k[i] ^ 0x5c
-          iKey[i] = k[i] ^ 0x36
-        }
-        const msg = enc.encode(message)
-        const inner = new Uint8Array(iKey.length + msg.length)
-        inner.set(iKey)
-        inner.set(msg, iKey.length)
-        const innerHash = sha256(inner)
-        const outer = new Uint8Array(oKey.length + innerHash.length)
-        outer.set(oKey)
-        outer.set(innerHash, oKey.length)
-        return sha256(outer)
-      }
-
-      function issueCode(secret, label) {
+      async function issueCode(label) {
         const payload = {
           v: 1,
           iat: Math.floor(Date.now() / 1000),
+          n: Math.floor(Math.random() * 1e9),
         }
         if (label) payload.label = label
-        // Tiny uniqueness so batch codes differ even in the same second
-        payload.n = Math.floor(Math.random() * 1e9)
         const body = toBase64Url(new TextEncoder().encode(JSON.stringify(payload)))
-        const sig = toBase64Url(hmacSha256(secret, body))
-        return `DD1.${body}.${sig}`
+        const priv = fromBase64Url(keys.privateKey)
+        const sig = await ed.signAsync(new TextEncoder().encode(body), priv)
+        return `DD2.${body}.${toBase64Url(sig)}`
       }
 
       async function copyText(text) {
@@ -446,8 +380,16 @@
         try {
           localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, 200)))
         } catch {
-          // ignore quota / file:// quirks
+          // ignore
         }
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
       }
 
       function renderHistory() {
@@ -471,14 +413,6 @@
           .join('')
       }
 
-      function escapeHtml(value) {
-        return String(value)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-      }
-
       historyBody.addEventListener('click', async (event) => {
         const btn = event.target.closest('[data-copy]')
         if (!btn) return
@@ -489,43 +423,48 @@
         showToast(ok ? 'Code copied' : 'Copy failed — select the code manually')
       })
 
-      $('generate').addEventListener('click', () => {
-        const secret = secretEl.value.trim() || DEFAULT_SECRET
-        try {
-          sessionStorage.setItem(SECRET_KEY, secret)
-        } catch {
-          // private mode / file restrictions — ignore
+      generateBtn.addEventListener('click', async () => {
+        if (!ed || !keys?.privateKey) {
+          showToast('Private key not loaded')
+          return
         }
         const label = labelEl.value.trim()
         let count = Number.parseInt(countEl.value, 10)
         if (!Number.isFinite(count) || count < 1) count = 1
         count = Math.min(50, count)
 
-        const batch = []
-        for (let i = 0; i < count; i += 1) {
-          const suffix = count > 1 ? ` (${i + 1}/${count})` : ''
-          const codeLabel = label ? `${label}${suffix}` : count > 1 ? `#${i + 1}` : undefined
-          batch.push({
-            code: issueCode(secret, codeLabel),
-            label: codeLabel || '',
-            at: new Date().toISOString(),
-          })
+        generateBtn.disabled = true
+        try {
+          const batch = []
+          for (let i = 0; i < count; i += 1) {
+            const suffix = count > 1 ? ` (${i + 1}/${count})` : ''
+            const codeLabel = label ? `${label}${suffix}` : count > 1 ? `#${i + 1}` : undefined
+            batch.push({
+              code: await issueCode(codeLabel),
+              label: codeLabel || '',
+              at: new Date().toISOString(),
+            })
+          }
+
+          lastBatch = batch
+          writeHistory([...batch, ...readHistory()])
+          renderHistory()
+
+          latestEl.textContent = batch.map((b) => b.code).join('\n')
+          latestEl.classList.remove('empty')
+          latestMeta.textContent =
+            count === 1
+              ? '1 Ed25519 code ready · 48 hours after customer activates'
+              : `${count} Ed25519 codes ready · each unlocks 48 hours after activate`
+          copyBtn.disabled = false
+          copyAllBtn.disabled = false
+          showToast(count === 1 ? 'Code generated' : `${count} codes generated`)
+        } catch (err) {
+          console.error(err)
+          showToast('Signing failed')
+        } finally {
+          generateBtn.disabled = false
         }
-
-        lastBatch = batch
-        const history = [...batch, ...readHistory()]
-        writeHistory(history)
-        renderHistory()
-
-        latestEl.textContent = batch.map((b) => b.code).join('\n')
-        latestEl.classList.remove('empty')
-        latestMeta.textContent =
-          count === 1
-            ? `1 code ready · activates for 48 hours on the customer PC`
-            : `${count} codes ready · each activates for 48 hours on a customer PC`
-        copyBtn.disabled = false
-        copyAllBtn.disabled = false
-        showToast(count === 1 ? 'Code generated' : `${count} codes generated`)
       })
 
       copyBtn.addEventListener('click', async () => {
@@ -548,7 +487,7 @@
       })
 
       labelEl.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') $('generate').click()
+        if (e.key === 'Enter') generateBtn.click()
       })
 
       renderHistory()

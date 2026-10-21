@@ -25,31 +25,19 @@ Packaged Windows builds open on an activation screen until a valid code is enter
 
 ### Issue a code (seller)
 
-**On your Windows PC (recommended)** — download the seller Code Issuer zip from the latest GitHub Release (`Draw-Down-Code-Issuer.zip`), unzip it, then double-click `Open-Code-Issuer.bat`. No install, no internet.
+Activation codes are **Ed25519-signed** (`DD2…`). The customer app ships only the public key; the private key lives in your seller Code Issuer. Legacy `DD1…` HMAC codes still activate if you have any outstanding.
+
+**On your Windows PC (recommended)** — download `Draw-Down-Code-Issuer.zip` from the latest GitHub Release, unzip it, then double-click `Open-Code-Issuer.bat`. Keep that zip private (it contains the signing key).
 
 Or from this repo:
 
 ```bash
-npm run license:ui
-```
-
-Opens [http://127.0.0.1:43129/](http://127.0.0.1:43129/) with Generate / Copy and a history of codes issued on that machine.
-
-Or from the terminal:
-
-```bash
-npm run license:issue
+npm run license:keys    # once — writes public key + seller private key files
+npm run license:ui      # on-screen issuer at http://127.0.0.1:43129/
 npm run license:issue -- --label "Friday gala"
 ```
 
-Optional: set the same secret in the issuer and the app before you ship builds:
-
-```bash
-# must match LICENSE_SECRET in src/lib/license.ts
-LICENSE_SECRET=your-private-secret npm run license:issue
-```
-
-Give the `DD1....` code to the customer after payment. Codes must be activated within 30 days of issue.
+Give the `DD2....` code to the customer after payment. Codes must be activated within 30 days of issue.
 
 ## Operator basics
 
