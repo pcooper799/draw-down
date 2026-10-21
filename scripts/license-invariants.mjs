@@ -46,4 +46,10 @@ assert(
   'expired with live event stays in app',
 )
 
+// Activation duration constant (documented expectation for v0.3.1+)
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+assert(SEVEN_DAYS_MS === 604800000, '7-day activation is 604800000 ms')
+assert(THIRTY_DAYS_MS === 2592000000, '30-day issue window is 2592000000 ms')
+
 console.log('OK license invariants')

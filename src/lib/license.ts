@@ -6,10 +6,15 @@
  *
  * Legacy: DD1… HMAC codes still verify for older activations.
  *
- * On successful activation, live drawings are unlocked for 48 hours from
+ * On successful activation, live drawings are unlocked for 7 days from
  * activation time. After expiry, organizers can still open the app to review
  * audit logs, verify results, and export reports — only starting or resuming
  * a live draw requires a new code.
+ *
+ * Issue time is encoded in the signed payload as `iat` (unix seconds). Both
+ * DD1 and DD2 carry `iat`; the app rejects codes older than the issue window
+ * (30 days). Offline codes are not single-use — the same code may be activated
+ * again after expiry while still inside that issue window.
  */
 
 import * as ed from '@noble/ed25519'
@@ -24,8 +29,10 @@ const STORAGE_KEY = LICENSE_STORAGE_KEY
 /** Legacy HMAC secret — kept so already-issued DD1 codes still activate. */
 export const LICENSE_SECRET = 'draw-down-phillip-cooper-license-2026'
 
-const HOURS_48_MS = 48 * 60 * 60 * 1000
-const ISSUE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+/** Live-drawing unlock duration after the customer activates on a PC. */
+export const ACTIVATION_DURATION_MS = 7 * 24 * 60 * 60 * 1000
+/** Codes must be activated within this many ms of payload `iat`. */
+export const ISSUE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
 
 export type LicenseRecord = {
   code: string
@@ -88,7 +95,8 @@ function parsePayload(body: string): IssuedPayload | null {
   }
 }
 
-function withinIssueWindow(payload: IssuedPayload, now: number) {
+/** True if `now` is still within 30 days of the code’s signed issue time (`iat`). */
+export function withinIssueWindow(payload: IssuedPayload, now: number) {
   return now <= payload.iat * 1000 + ISSUE_WINDOW_MS
 }
 
@@ -225,7 +233,7 @@ export async function activateLicenseCode(code: string, now = Date.now()) {
   const record: LicenseRecord = {
     code: code.trim(),
     activatedAt: new Date(now).toISOString(),
-    expiresAt: new Date(now + HOURS_48_MS).toISOString(),
+    expiresAt: new Date(now + ACTIVATION_DURATION_MS).toISOString(),
   }
   writeLicenseRecord(record)
   return { ok: true as const, record }

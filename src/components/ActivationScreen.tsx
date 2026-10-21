@@ -62,7 +62,7 @@ export function ActivationScreen({
         <p className="mt-2 text-sm text-[var(--ink-muted)]">
           {variant === 'overlay'
             ? 'Enter a new code to start or resume a live draw. Audit logs and verification stay available without renewing.'
-            : 'Paid event license · 48 hours of live drawing per activation code'}
+            : 'Paid event license · 7 days of live drawing per activation code'}
         </p>
       </div>
 
@@ -95,7 +95,7 @@ export function ActivationScreen({
           onClick={() => void submit()}
         >
           <KeyRound />
-          {busy ? 'Checking…' : 'Activate 48-hour access'}
+          {busy ? 'Checking…' : 'Activate 7-day access'}
         </Button>
       </div>
 
@@ -103,7 +103,7 @@ export function ActivationScreen({
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[var(--safe)]" />
         {variant === 'overlay'
           ? 'Your board, session, and audit history stay on this computer. Close this to keep reviewing without renewing.'
-          : 'Enter the code you purchased. Live drawing is unlocked for 48 hours from activation. After that you can still open past events to verify and export reports.'}
+          : 'Enter the code you purchased. Live drawing is unlocked for 7 days from activation. After that you can still open past events to verify and export reports. Codes include a signed issue time and must be activated within 30 days of issue.'}
       </p>
     </div>
   )

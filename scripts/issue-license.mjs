@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Issue a Draw Down activation code (48h of use after the customer activates).
+ * Issue a Draw Down activation code (7 days of use after the customer activates).
  *
  * Prefers Ed25519 (DD2) when tools/license-issuer/private-key.json exists.
  * Falls back to legacy HMAC (DD1) otherwise.
@@ -65,7 +65,8 @@ console.log('-------------------------')
 console.log(code)
 console.log('')
 console.log(`Signing: ${mode}`)
-console.log('Customer gets 48 hours of use starting when they activate.')
+console.log('Customer gets 7 days of use starting when they activate.')
+console.log('Code includes signed issue time (iat); must activate within 30 days of issue.')
 console.log('Code can be activated within 30 days of issue.')
 if (label) console.log(`Label: ${label}`)
 console.log('')

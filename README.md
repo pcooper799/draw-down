@@ -2,7 +2,7 @@
 
 Windows desktop event software for ticket draw-downs. Tickets leave the pool one at a time at a staged pace until a configurable number remain. Insured tickets return to the pool after being drawn.
 
-Paid software: each customer activates with a code that unlocks **48 hours** of live drawing on that computer. After expiry they can still open the app to review audit logs, verify results, and export reports — only starting or resuming a live draw needs a new code.
+Paid software: each customer activates with a code that unlocks **7 days** of live drawing on that computer. After expiry they can still open the app to review audit logs, verify results, and export reports — only starting or resuming a live draw needs a new code.
 
 ## Stack
 
@@ -19,9 +19,11 @@ npm run electron:dev
 - Dev mode skips the activation gate (banner shown). Packaged builds require a code.
 - Local-only — no account, database, or cloud required.
 
-## Paid activation (48 hours)
+## Paid activation (7 days)
 
-Packaged Windows builds open on an activation screen until a valid code is entered (first use). Activation unlocks **live drawing for 48 hours**. The license is stored in this PC’s app data (`%APPDATA%\draw-down` localStorage) — updating or reinstalling does **not** remove it until those 48 hours end, or you use **Setup → Clear activation on this PC**. When that window ends, the app stays open in **review mode**: organizers can read audit history, run verification, and export reports without buying another code. Starting or resuming a live draw requires a new activation.
+Packaged Windows builds open on an activation screen until a valid code is entered (first use). Activation unlocks **live drawing for 7 days**. The license is stored in this PC’s app data (`%APPDATA%\draw-down` localStorage) — updating or reinstalling does **not** remove it until those 7 days end, or you use **Setup → Clear activation on this PC**. When that window ends, the app stays open in **review mode**: organizers can read audit history, run verification, and export reports without buying another code. Starting or resuming a live draw requires a new activation.
+
+Each code’s signed payload includes **`iat`** (issued-at, unix seconds). The app checks that activation happens within **30 days of `iat`**. Offline codes are not single-use: the same code can be activated again after expiry while still inside that issue window (accepted cost of fully offline licensing).
 
 Autosave keeps the last session (including insurance marks). A **finished** event reopens as a fresh all-yellow board. Mid-event restores keep greens; press **Reset** or **Setup → Clear saved session** for all yellow.
 
@@ -131,7 +133,7 @@ The download page (`website/index.html`) auto-resolves the latest Release assets
 | `npm run electron:dev` | Dev server + Electron |
 | `npm run typecheck` | TypeScript check |
 | `npm run license:keys` | Create Ed25519 keypair (seller machine only) |
-| `npm run license:issue` | Generate a paid 48-hour activation code (CLI, seller machine) |
+| `npm run license:issue` | Generate a paid 7-day activation code (CLI, seller machine) |
 | `npm run test:gameplay` | Run draw/insurance invariant checks |
 | `npm run dist` / `dist:win` | Build Windows NSIS + portable installers |
 | `npm run release:repo -- owner/repo` | One-time rewrite of GitHub publish placeholders |

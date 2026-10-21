@@ -378,7 +378,7 @@ export function OperatorPanel({
                     </p>
                   )}
                   <p className="text-xs text-[var(--ink-faint)]">
-                    Activation lasts 48 hours from when you entered the code. Updating or reinstalling
+                    Activation lasts 7 days from when you entered the code. Updating or reinstalling
                     does not wipe it. Use Clear activation below, or Uninstall (new builds wipe app
                     data).
                   </p>
