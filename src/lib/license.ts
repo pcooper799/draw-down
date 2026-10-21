@@ -57,6 +57,8 @@ export type IssuedPayload = {
   iat: number
   /** Optional label for your records */
   label?: string
+  /** Optional uniqueness nonce (local issuer UI batching) */
+  n?: number
 }
 
 export async function issueLicenseCode(options?: {
