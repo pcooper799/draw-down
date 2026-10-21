@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PanelRightOpen } from 'lucide-react'
+import { ActivationScreen, LicenseBadge } from '@/components/ActivationScreen'
 import { FinishCelebration, useFinishCelebration } from '@/components/FinishCelebration'
 import { OperatorPanel } from '@/components/OperatorPanel'
 import { StageDisplay } from '@/components/StageDisplay'
 import { Button } from '@/components/ui/button'
 import { useDrawSession } from '@/hooks/useDrawSession'
+import { getLicenseStatus, type LicenseStatus } from '@/lib/license'
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -17,7 +19,21 @@ function isTypingTarget(target: EventTarget | null) {
   )
 }
 
+function useLicenseGate() {
+  const [status, setStatus] = useState<LicenseStatus>(() => getLicenseStatus())
+  const refresh = useCallback(() => setStatus(getLicenseStatus()), [])
+
+  useEffect(() => {
+    const id = window.setInterval(refresh, 30_000)
+    return () => window.clearInterval(id)
+  }, [refresh])
+
+  const licensed = status.state === 'active' || import.meta.env.DEV
+  return { status, refresh, licensed, isDev: import.meta.env.DEV }
+}
+
 export default function App() {
+  const license = useLicenseGate()
   const session = useDrawSession()
   const [projectionMode, setProjectionMode] = useState(false)
   const { status, start, pause, remaining, config, saveNow } = session
@@ -27,15 +43,14 @@ export default function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return
       if (isTypingTarget(event.target)) return
+      if (!license.licensed) return
 
-      // Exit projection / show controls
       if (event.key === 'Escape' && projectionMode) {
         event.preventDefault()
         setProjectionMode(false)
         return
       }
 
-      // Toggle projection (P). Ignore when modifier chords are held except Shift.
       if (
         (event.key === 'p' || event.key === 'P') &&
         !event.metaKey &&
@@ -47,14 +62,12 @@ export default function App() {
         return
       }
 
-      // Manual save
       if ((event.key === 's' || event.key === 'S') && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         saveNow()
         return
       }
 
-      // Space: pause / resume while projecting (also handy with controls visible)
       if (event.key === ' ' || event.code === 'Space') {
         event.preventDefault()
         if (status === 'running') {
@@ -69,10 +82,20 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [projectionMode, status, start, pause, remaining, config.stopAt, saveNow])
+  }, [projectionMode, status, start, pause, remaining, config.stopAt, saveNow, license.licensed])
+
+  if (!license.licensed) {
+    return <ActivationScreen status={license.status} onActivated={license.refresh} />
+  }
 
   return (
     <div className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--stage)] text-[var(--ink)] lg:flex-row">
+      {license.isDev && license.status.state !== 'active' && (
+        <div className="absolute left-3 top-3 z-30 border border-[var(--accent)]/40 bg-black/70 px-2 py-1 text-[0.65rem] text-[var(--accent)]">
+          Dev mode · license gate skipped
+        </div>
+      )}
+
       <StageDisplay
         orgName={session.config.orgName}
         brandImageDataUrl={session.config.brandImageDataUrl}
@@ -91,6 +114,7 @@ export default function App() {
         <OperatorPanel
           session={session}
           onEnterProjection={() => setProjectionMode(true)}
+          licenseBadge={<LicenseBadge status={license.status} />}
         />
       )}
 

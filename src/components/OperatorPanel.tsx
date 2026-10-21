@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   FolderOpen,
   ImagePlus,
@@ -30,9 +30,10 @@ import type { DrawSession } from '@/hooks/useDrawSession'
 type Props = {
   session: DrawSession
   onEnterProjection: () => void
+  licenseBadge?: ReactNode
 }
 
-export function OperatorPanel({ session, onEnterProjection }: Props) {
+export function OperatorPanel({ session, onEnterProjection, licenseBadge }: Props) {
   const {
     config,
     applyConfig,
@@ -124,6 +125,7 @@ export function OperatorPanel({ session, onEnterProjection }: Props) {
             Operator
           </p>
           <p className="font-display text-xl tracking-wide text-[var(--ink)]">Controls</p>
+          {licenseBadge}
         </div>
         <div className="flex items-center gap-2">
           <Button

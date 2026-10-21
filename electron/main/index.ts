@@ -32,6 +32,12 @@ let win: BrowserWindow | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
+function resolveAppIcon() {
+  const buildIco = path.join(process.env.APP_ROOT!, 'build', 'icon.ico')
+  const publicIco = path.join(process.env.VITE_PUBLIC!, 'favicon.ico')
+  return process.platform === 'win32' ? buildIco : publicIco
+}
+
 async function createWindow() {
   win = new BrowserWindow({
     title: 'Draw Down',
@@ -41,7 +47,7 @@ async function createWindow() {
     minHeight: 700,
     backgroundColor: '#0b1210',
     show: false,
-    icon: path.join(process.env.VITE_PUBLIC!, 'favicon.ico'),
+    icon: resolveAppIcon(),
     webPreferences: {
       preload,
       contextIsolation: true,
