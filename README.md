@@ -25,6 +25,16 @@ Packaged Windows builds open on an activation screen until a valid code is enter
 
 ### Issue a code (seller)
 
+**On-screen issuer (recommended)** — local offline UI on your computer:
+
+```bash
+npm run license:ui
+```
+
+Opens [http://127.0.0.1:43129/](http://127.0.0.1:43129/) with Generate / Copy and a history of codes issued on that machine. No internet required. Keep the terminal running while you use it.
+
+Or from the terminal:
+
 ```bash
 npm run license:issue
 npm run license:issue -- --label "Friday gala"
@@ -37,7 +47,7 @@ Optional: set the same secret in the issuer and the app before you ship builds:
 LICENSE_SECRET=your-private-secret npm run license:issue
 ```
 
-Give the printed `DD1....` code to the customer after payment. Codes must be activated within 30 days of issue.
+Give the `DD1....` code to the customer after payment. Codes must be activated within 30 days of issue.
 
 ## Operator basics
 
@@ -119,7 +129,8 @@ The download page (`website/index.html`) auto-resolves the latest Release assets
 | --- | --- |
 | `npm run electron:dev` | Dev server + Electron |
 | `npm run typecheck` | TypeScript check |
-| `npm run license:issue` | Generate a paid 48-hour activation code |
+| `npm run license:ui` | Local offline on-screen activation code issuer |
+| `npm run license:issue` | Generate a paid 48-hour activation code (CLI) |
 | `npm run test:gameplay` | Run draw/insurance invariant checks |
 | `npm run dist` / `dist:win` | Build Windows NSIS + portable installers |
 | `npm run release:repo -- owner/repo` | One-time rewrite of GitHub publish placeholders |

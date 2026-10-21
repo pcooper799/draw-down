@@ -19,6 +19,7 @@
     "dist:win:portable": "npm run build:vite && electron-builder --win portable zip --x64 --publish never",
     "dist:dir": "npm run build:vite && electron-builder --win --x64 --dir --publish never",
     "license:issue": "node scripts/issue-license.mjs",
+    "license:ui": "node scripts/serve-license-issuer.mjs",
     "test:gameplay": "node scripts/gameplay-invariants.mjs",
     "release:repo": "node scripts/set-release-repo.mjs",
     "preview": "vite preview --port 43127 --host 127.0.0.1"
