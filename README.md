@@ -19,7 +19,7 @@ npm run electron:dev
 ## Operator basics
 
 1. Open **Session setup** (gear) to set organization name, starting ticket count, stop-at remaining, and brand image.
-2. Use **Insurance** to mark tickets by number, range, or random percent.
+2. Use **Insurance** to mark each ticket number that bought insurance.
 3. Set **Draw pace**, then **Start**. Pause and reset as needed during a live event.
 
 ### Defaults

@@ -83,41 +83,6 @@ export function useDrawSession() {
     [syncInsuranceIntoPool],
   )
 
-  const setRangeInsured = useCallback(
-    (from: number, to: number, insured: boolean) => {
-      const lo = Math.min(from, to)
-      const hi = Math.max(from, to)
-      setInsuranceMarks((prev) => {
-        const next = new Set(prev)
-        for (let n = lo; n <= hi; n += 1) {
-          if (n < 1 || n > configRef.current.totalTickets) continue
-          if (insured) next.add(n)
-          else next.delete(n)
-        }
-        syncInsuranceIntoPool(next)
-        return next
-      })
-    },
-    [syncInsuranceIntoPool],
-  )
-
-  const setPercentInsured = useCallback(
-    (percent: number) => {
-      const pct = Math.max(0, Math.min(100, percent))
-      const total = configRef.current.totalTickets
-      const count = Math.round((pct / 100) * total)
-      const numbers = Array.from({ length: total }, (_, i) => i + 1)
-      for (let i = numbers.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[numbers[i], numbers[j]] = [numbers[j], numbers[i]]
-      }
-      const next = new Set(numbers.slice(0, count))
-      setInsuranceMarks(next)
-      syncInsuranceIntoPool(next)
-    },
-    [syncInsuranceIntoPool],
-  )
-
   const clearAllInsurance = useCallback(() => {
     const empty = new Set<number>()
     setInsuranceMarks(empty)
@@ -260,8 +225,6 @@ export function useDrawSession() {
     pause,
     resetSession,
     setTicketInsured,
-    setRangeInsured,
-    setPercentInsured,
     clearAllInsurance,
     drawOnce,
   }

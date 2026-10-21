@@ -3,7 +3,6 @@ import { Shield, ShieldOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Slider } from '@/components/ui/slider'
 import { formatTicket } from '@/lib/utils'
 import type { DrawSession } from '@/hooks/useDrawSession'
 
@@ -18,26 +17,33 @@ export function InsuranceManager({ session, locked }: Props) {
     insuranceMarks,
     insuredCount,
     setTicketInsured,
-    setRangeInsured,
-    setPercentInsured,
     clearAllInsurance,
     digits,
   } = session
 
-  const [search, setSearch] = useState('')
-  const [rangeFrom, setRangeFrom] = useState('1')
-  const [rangeTo, setRangeTo] = useState('10')
-  const [percent, setPercent] = useState(10)
+  const [ticketInput, setTicketInput] = useState('')
 
   const insuredList = useMemo(
     () => [...insuranceMarks].sort((a, b) => a - b),
     [insuranceMarks],
   )
 
-  const searchNum = Number.parseInt(search, 10)
-  const searchValid =
-    Number.isFinite(searchNum) && searchNum >= 1 && searchNum <= config.totalTickets
-  const searchInsured = searchValid && insuranceMarks.has(searchNum)
+  const ticketNum = Number.parseInt(ticketInput, 10)
+  const ticketValid =
+    Number.isFinite(ticketNum) && ticketNum >= 1 && ticketNum <= config.totalTickets
+  const alreadyInsured = ticketValid && insuranceMarks.has(ticketNum)
+
+  const addInsurance = () => {
+    if (!ticketValid || locked) return
+    setTicketInsured(ticketNum, true)
+    setTicketInput('')
+  }
+
+  const clearInsurance = () => {
+    if (!ticketValid || locked) return
+    setTicketInsured(ticketNum, false)
+    setTicketInput('')
+  }
 
   return (
     <div className="space-y-5">
@@ -45,116 +51,69 @@ export function InsuranceManager({ session, locked }: Props) {
         <div>
           <h3 className="font-display text-xl tracking-wide text-[var(--ink)]">Insurance</h3>
           <p className="mt-1 text-sm text-[var(--ink-muted)]">
-            Insured tickets return once as regular; next draw eliminates them.
+            Mark tickets that bought insurance. They return once as regular; next draw is out.
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs uppercase tracking-[0.16em] text-[var(--ink-faint)]">Marked</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-[var(--ink-faint)]">Bought</p>
           <p className="font-display text-2xl text-[var(--safe)]">{insuredCount}</p>
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="ticket-search">Find ticket number</Label>
+        <Label htmlFor="ticket-insure">Ticket number</Label>
         <div className="flex gap-2">
           <Input
-            id="ticket-search"
+            id="ticket-insure"
             inputMode="numeric"
             placeholder="e.g. 247"
-            value={search}
+            value={ticketInput}
             disabled={locked}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Button
-            type="button"
-            variant={searchInsured ? 'secondary' : 'default'}
-            disabled={locked || !searchValid}
-            onClick={() => setTicketInsured(searchNum, !searchInsured)}
-          >
-            {searchInsured ? <ShieldOff /> : <Shield />}
-            {searchInsured ? 'Clear' : 'Insure'}
-          </Button>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Mark range</Label>
-        <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-2">
-          <Input
-            inputMode="numeric"
-            value={rangeFrom}
-            disabled={locked}
-            onChange={(e) => setRangeFrom(e.target.value)}
-            aria-label="Range from"
-          />
-          <Input
-            inputMode="numeric"
-            value={rangeTo}
-            disabled={locked}
-            onChange={(e) => setRangeTo(e.target.value)}
-            aria-label="Range to"
-          />
-          <Button
-            type="button"
-            size="sm"
-            disabled={locked}
-            onClick={() => {
-              const from = Number.parseInt(rangeFrom, 10)
-              const to = Number.parseInt(rangeTo, 10)
-              if (!Number.isFinite(from) || !Number.isFinite(to)) return
-              setRangeInsured(from, to, true)
+            onChange={(e) => setTicketInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                if (alreadyInsured) clearInsurance()
+                else addInsurance()
+              }
             }}
-          >
-            Insure range
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={locked}
-            onClick={() => {
-              const from = Number.parseInt(rangeFrom, 10)
-              const to = Number.parseInt(rangeTo, 10)
-              if (!Number.isFinite(from) || !Number.isFinite(to)) return
-              setRangeInsured(from, to, false)
-            }}
-          >
-            Clear range
-          </Button>
+          />
+          {alreadyInsured ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={locked || !ticketValid}
+              onClick={clearInsurance}
+            >
+              <ShieldOff />
+              Clear
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled={locked || !ticketValid}
+              onClick={addInsurance}
+            >
+              <Shield />
+              Insure
+            </Button>
+          )}
         </div>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label>Random percent insured</Label>
-          <span className="text-sm text-[var(--ink-muted)]">{percent}%</span>
-        </div>
-        <Slider
-          value={[percent]}
-          min={0}
-          max={100}
-          step={1}
-          disabled={locked}
-          onValueChange={(v) => setPercent(v[0] ?? 0)}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          disabled={locked}
-          onClick={() => setPercentInsured(percent)}
-        >
-          Apply random {percent}% insurance
-        </Button>
       </div>
 
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-[var(--ink-faint)]">
           {insuredList.length === 0
-            ? 'No insured tickets yet.'
-            : `Showing ${Math.min(insuredList.length, 48)} of ${insuredList.length}`}
+            ? 'No insurance purchased yet.'
+            : `${insuredList.length} insured · click a number to remove`}
         </p>
-        <Button type="button" variant="ghost" size="sm" disabled={locked || insuredCount === 0} onClick={clearAllInsurance}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={locked || insuredCount === 0}
+          onClick={clearAllInsurance}
+        >
           Clear all
         </Button>
       </div>
@@ -162,7 +121,7 @@ export function InsuranceManager({ session, locked }: Props) {
       {insuredList.length > 0 && (
         <div className="max-h-40 overflow-y-auto border border-[var(--line)] bg-[var(--panel-elevated)] p-2">
           <div className="flex flex-wrap gap-1.5">
-            {insuredList.slice(0, 48).map((n) => (
+            {insuredList.map((n) => (
               <button
                 key={n}
                 type="button"
