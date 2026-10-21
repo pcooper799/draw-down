@@ -25,13 +25,15 @@ Packaged Windows builds open on an activation screen until a valid code is enter
 
 ### Issue a code (seller)
 
-**On-screen issuer (recommended)** — local offline UI on your computer:
+**On your Windows PC (recommended)** — download the seller Code Issuer zip from the latest GitHub Release (`Draw-Down-Code-Issuer.zip`), unzip it, then double-click `Open-Code-Issuer.bat`. No install, no internet.
+
+Or from this repo:
 
 ```bash
 npm run license:ui
 ```
 
-Opens [http://127.0.0.1:43129/](http://127.0.0.1:43129/) with Generate / Copy and a history of codes issued on that machine. No internet required. Keep the terminal running while you use it.
+Opens [http://127.0.0.1:43129/](http://127.0.0.1:43129/) with Generate / Copy and a history of codes issued on that machine.
 
 Or from the terminal:
 
