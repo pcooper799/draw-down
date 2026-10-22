@@ -97,6 +97,112 @@
     box-shadow: 0 0 0 1px rgba(211, 90, 74, 0.28), 0 0 48px rgba(211, 90, 74, 0.12);
   }
 
+  .recent-draws {
+    border: 1px solid var(--line);
+    background: linear-gradient(160deg, rgba(18, 28, 24, 0.78), rgba(10, 14, 12, 0.72));
+    padding: 0.65rem 0.8rem;
+  }
+
+  .recent-draws-chip {
+    display: flex;
+    min-width: 4.25rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--line);
+    background: rgba(0, 0, 0, 0.28);
+  }
+
+  .recent-draws-chip--saved {
+    color: #e8fff1;
+    border-color: rgba(140, 210, 165, 0.55);
+    background: linear-gradient(160deg, rgba(90, 168, 122, 0.55), rgba(54, 120, 84, 0.4));
+  }
+
+  .recent-draws-chip--out {
+    color: rgba(243, 230, 200, 0.88);
+    border-color: rgba(211, 90, 74, 0.55);
+    background: linear-gradient(160deg, rgba(180, 70, 58, 0.55), rgba(120, 40, 34, 0.4));
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+
+  .recent-draws-chip--out span:last-child {
+    text-decoration: none;
+  }
+
+  .recent-draws-chip--latest {
+    box-shadow: 0 0 0 1px rgba(243, 230, 200, 0.35), 0 0 18px rgba(243, 230, 200, 0.12);
+  }
+
+  .recent-draws-chip--empty {
+    opacity: 0.35;
+  }
+
+  .center-draw-flash {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    animation: center-flash-veil 1.6s ease-out both;
+  }
+
+  .center-draw-flash-burst {
+    position: absolute;
+    inset: 18% 22%;
+    border-radius: 50%;
+    filter: blur(2px);
+  }
+
+  .center-draw-flash--out .center-draw-flash-burst {
+    background: radial-gradient(circle, rgba(211, 90, 74, 0.45), transparent 68%);
+    animation: center-flash-burst-out 1.6s ease-out both;
+  }
+
+  .center-draw-flash--saved .center-draw-flash-burst {
+    background: radial-gradient(circle, rgba(90, 168, 122, 0.42), transparent 68%);
+    animation: center-flash-burst-saved 1.6s ease-out both;
+  }
+
+  .center-draw-flash-card {
+    position: relative;
+    z-index: 1;
+    min-width: min(72vw, 22rem);
+    padding: 1.6rem 2rem 1.4rem;
+    text-align: center;
+    border: 1px solid var(--line);
+    background: linear-gradient(165deg, rgba(12, 18, 16, 0.92), rgba(8, 12, 10, 0.88));
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  }
+
+  .center-draw-flash--out .center-draw-flash-card {
+    border-color: rgba(211, 90, 74, 0.55);
+    animation: center-flash-card-out 1.6s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  }
+
+  .center-draw-flash--saved .center-draw-flash-card {
+    border-color: rgba(140, 210, 165, 0.55);
+    animation: center-flash-card-saved 1.6s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  }
+
+  .center-draw-flash-number {
+    margin-top: 0.35rem;
+    font-size: clamp(4.5rem, 16vw, 8.5rem);
+    line-height: 0.9;
+    letter-spacing: 0.04em;
+  }
+
+  .center-draw-flash--out .center-draw-flash-number {
+    color: var(--danger);
+  }
+
+  .center-draw-flash--saved .center-draw-flash-number {
+    color: var(--safe);
+  }
+
   .operator-panel {
     background:
       linear-gradient(180deg, rgba(22, 32, 28, 0.98), rgba(12, 18, 16, 0.98));
@@ -337,12 +443,103 @@
   }
 }
 
+@keyframes center-flash-veil {
+  0% {
+    background: rgba(0, 0, 0, 0);
+  }
+  12% {
+    background: rgba(0, 0, 0, 0.42);
+  }
+  75% {
+    background: rgba(0, 0, 0, 0.35);
+  }
+  100% {
+    background: rgba(0, 0, 0, 0);
+  }
+}
+
+@keyframes center-flash-card-out {
+  0% {
+    opacity: 0;
+    transform: scale(1.35) rotate(-2deg);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.88) translateY(18px);
+  }
+}
+
+@keyframes center-flash-card-saved {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  38% {
+    transform: scale(0.97);
+  }
+  55% {
+    transform: scale(1);
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes center-flash-burst-out {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes center-flash-burst-saved {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  30% {
+    opacity: 0.95;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stage-fallback-grid,
   .stage-brand-drift,
   .stage-brand-in,
   .ticket-reveal,
-  .activation-glow {
+  .activation-glow,
+  .center-draw-flash,
+  .center-draw-flash-burst,
+  .center-draw-flash-card {
     animation: none !important;
   }
 }

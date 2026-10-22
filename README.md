@@ -54,6 +54,7 @@ Give the `DD2....` code to the customer after payment. Codes must be activated w
 4. Check **Projector safety** (monitor, resolution, fullscreen, live preview) and **Move to Projector** before going live. Set **Draw pace** before the first Start (pace locks once the draw has started until Reset), then **Start**.
    Use **Emergency Stop** for an instant safe pause (no reset); resume requires an explicit confirmation and is audited.
    Wizard **Finish setup** keeps insurance marks and other fields when ticket count is unchanged.
+   On stage, a **Recently drawn** strip shows the last five tickets (saved by insurance vs out), and each draw flashes large in the center with different motion for eliminated vs insurance-saved.
    On the desktop app, **Stage** and **Operator** open as separate windows (operator stays on top so it never covers the board). In the browser, use **Pop out** for the same split.
    In **projection** / fullscreen, use **Ticket size** in the operator panel (or `+` / `−` keys, or the on-stage size controls) so numbers stay readable on a big screen. Size persists with the session; the board scrolls if zoomed large.
 5. When the draw **stops at your stop number**, award the prize, set a **new (lower) stop** for the next prize, and continue — no reset required.

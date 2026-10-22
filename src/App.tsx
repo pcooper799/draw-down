@@ -421,6 +421,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         stopAt={session.config.stopAt}
         totalTickets={session.config.totalTickets}
         lastDrawn={session.lastDrawn}
+        history={session.history}
         flashKey={session.flashKey}
         status={session.status}
         digits={session.digits}
@@ -646,6 +647,7 @@ function StageMirrorApp() {
         stopAt={view.config.stopAt}
         totalTickets={view.config.totalTickets}
         lastDrawn={view.lastDrawn}
+        history={view.history}
         flashKey={view.flashKey}
         status={view.status}
         digits={view.digits}

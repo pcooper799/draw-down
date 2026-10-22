@@ -1,3 +1,5 @@
+import { CenterDrawFlash } from '@/components/CenterDrawFlash'
+import { RecentDrawsStrip } from '@/components/RecentDrawsStrip'
 import { TicketBoard } from '@/components/TicketBoard'
 import { formatTicket } from '@/lib/utils'
 import type { DrawEvent, DrawStatus, Ticket } from '@/types'
@@ -9,6 +11,7 @@ type StageDisplayProps = {
   stopAt: number
   totalTickets: number
   lastDrawn: DrawEvent | null
+  history: DrawEvent[]
   flashKey: number
   status: DrawStatus
   digits: number
@@ -26,6 +29,7 @@ export function StageDisplay({
   stopAt,
   totalTickets,
   lastDrawn,
+  history,
   flashKey,
   status,
   digits,
@@ -129,7 +133,11 @@ export function StageDisplay({
           </div>
         </div>
 
-        <div className="mt-4 flex min-h-0 flex-1 flex-col">
+        <div className="mt-3 shrink-0">
+          <RecentDrawsStrip history={history} digits={digits} />
+        </div>
+
+        <div className="mt-3 flex min-h-0 flex-1 flex-col">
           <TicketBoard
             totalTickets={totalTickets}
             pool={pool}
@@ -155,6 +163,8 @@ export function StageDisplay({
           </div>
         </div>
       </div>
+
+      <CenterDrawFlash lastDrawn={lastDrawn} flashKey={flashKey} digits={digits} />
     </section>
   )
 }
