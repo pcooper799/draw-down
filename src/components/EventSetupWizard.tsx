@@ -97,7 +97,10 @@ export function EventSetupWizard({
   }
 
   const applyTickets = () => {
-    commitTotalTickets(parsedTotal)
+    // Only rebuild when count changes — commitTotalTickets clears insurance on resize.
+    if (parsedTotal !== config.totalTickets) {
+      commitTotalTickets(parsedTotal)
+    }
     setTotalDraft(String(parsedTotal))
   }
 
@@ -378,9 +381,14 @@ export function EventSetupWizard({
                   id="wiz-pace"
                   inputMode="decimal"
                   value={paceDraft}
-                  disabled={controlsLocked}
+                  disabled={controlsLocked || session.drawHasStarted}
                   onChange={(e) => setPaceDraft(e.target.value)}
                 />
+                {session.drawHasStarted && (
+                  <p className="text-xs text-[var(--ink-faint)]">
+                    Pace is locked after Start — use Reset for a new event to change it.
+                  </p>
+                )}
               </div>
             </div>
           )}

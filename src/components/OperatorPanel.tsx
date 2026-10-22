@@ -199,6 +199,10 @@ export function OperatorPanel({
   }
 
   const commitPaceSeconds = (raw: string) => {
+    if (drawHasStarted) {
+      setPaceDraft((config.paceMs / 1000).toFixed(config.paceMs % 1000 === 0 ? 0 : 1))
+      return
+    }
     const seconds = Number.parseFloat(raw)
     if (!Number.isFinite(seconds)) {
       setPaceDraft((config.paceMs / 1000).toFixed(1))
@@ -564,7 +568,7 @@ export function OperatorPanel({
                 className="h-8 w-20 text-right font-mono"
                 inputMode="decimal"
                 value={paceDraft}
-                disabled={controlsLocked}
+                disabled={controlsLocked || drawHasStarted}
                 onChange={(e) => setPaceDraft(e.target.value)}
                 onBlur={() => commitPaceSeconds(paceDraft)}
                 onKeyDown={(e) => {
@@ -580,11 +584,14 @@ export function OperatorPanel({
             min={500}
             max={10000}
             step={100}
-            disabled={controlsLocked}
+            disabled={controlsLocked || drawHasStarted}
             onValueChange={(v) => applyConfig({ paceMs: v[0] ?? 2500 })}
           />
           <p className="text-xs text-[var(--ink-faint)]">
-            {paceSeconds.toFixed(paceSeconds < 10 ? 1 : 0)}s between draws · editable live
+            {paceSeconds.toFixed(paceSeconds < 10 ? 1 : 0)}s between draws
+            {drawHasStarted
+              ? ' · locked after Start (Reset to change)'
+              : ' · set before you start'}
           </p>
         </section>
 

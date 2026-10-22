@@ -282,6 +282,20 @@ export function useDrawSession() {
     (next: Partial<SessionConfig>) => {
       let prevStop = configRef.current.stopAt
       let prevName = configRef.current.orgName
+      // Pace is locked after the first Start until a gated Reset / new event.
+      const drawStarted =
+        statusRef.current === 'running' ||
+        statusRef.current === 'paused' ||
+        statusRef.current === 'finished' ||
+        historyRef.current.length > 0 ||
+        eliminatedRef.current.length > 0 ||
+        Boolean(auditRef.current.seed.commitment)
+      if (drawStarted && next.paceMs != null && next.paceMs !== configRef.current.paceMs) {
+        setSaveNotice('Pace is locked after Start — Reset for a new event to change speed')
+        const { paceMs: _ignored, ...rest } = next
+        next = rest
+        if (Object.keys(next).length === 0) return
+      }
       setConfig((prev) => {
         const merged = { ...prev, ...next }
         merged.stopAt = clampStopAt(merged.stopAt, merged.totalTickets)
@@ -596,6 +610,8 @@ export function useDrawSession() {
       }
       const stopAt = configRef.current.stopAt
       const safe = clampTotalTickets(total, stopAt)
+      // Same count: no rebuild — preserves insurance marks (wizard Finish must not wipe them).
+      if (safe === configRef.current.totalTickets) return
       applyConfig({ totalTickets: safe })
       const empty = new Set<number>()
       insuranceRef.current = empty
