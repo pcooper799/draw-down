@@ -60,6 +60,7 @@ function buildViewState(session: DrawSession, license: LicenseStatus): BridgeVie
     config: session.config,
     pool: session.pool,
     heldOut: session.heldOut,
+    preStartHeld: session.preStartHeld,
     eliminated: session.eliminated,
     history: session.history,
     lastDrawn: session.lastDrawn,
@@ -84,6 +85,7 @@ function usePublishSession(session: DrawSession, license: LicenseStatus, enabled
     session.config,
     session.pool,
     session.heldOut,
+    session.preStartHeld,
     session.eliminated,
     session.history,
     session.lastDrawn,
@@ -432,6 +434,8 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         heldOut={session.heldOut}
         ticketScale={session.config.ticketScale}
         onToggleHold={license.licensed ? session.toggleTicketHold : undefined}
+        drawHasStarted={session.drawHasStarted}
+        preStartHeld={session.preStartHeld}
       />
 
       {!projectionMode && panel}
@@ -647,6 +651,14 @@ function StageMirrorApp() {
             ? (ticket) => sendBridgeCommand({ type: 'toggleHold', ticket })
             : undefined
         }
+        drawHasStarted={
+          view.status === 'running' ||
+          view.status === 'paused' ||
+          view.status === 'finished' ||
+          view.history.length > 0 ||
+          view.eliminated.length > 0
+        }
+        preStartHeld={view.preStartHeld ?? []}
       />
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-end gap-2 px-3 pb-3 sm:px-4">

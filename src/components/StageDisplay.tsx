@@ -21,6 +21,8 @@ type StageDisplayProps = {
   heldOut: number[]
   ticketScale?: number
   onToggleHold?: (ticket: number) => void
+  drawHasStarted?: boolean
+  preStartHeld?: number[]
 }
 
 export function StageDisplay({
@@ -39,6 +41,8 @@ export function StageDisplay({
   heldOut,
   ticketScale = 1,
   onToggleHold,
+  drawHasStarted = false,
+  preStartHeld = [],
 }: StageDisplayProps) {
   const outcome = lastDrawn?.outcome
   const isReturned = outcome === 'returned'
@@ -147,6 +151,8 @@ export function StageDisplay({
             ticketScale={ticketScale}
             lastDrawnTicket={lastDrawn?.ticket ?? null}
             onToggleHold={onToggleHold}
+            drawHasStarted={drawHasStarted}
+            preStartHeld={preStartHeld}
           />
         </div>
 

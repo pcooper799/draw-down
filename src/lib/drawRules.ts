@@ -130,3 +130,24 @@ export function hasLiveEventProgress(input: {
     (input.heldOutCount ?? 0) > 0
   )
 }
+
+/**
+ * After Start: only tickets that were held before the game started may be
+ * re-held. Restore (unhold) is always allowed. Before Start: any in-pool ticket
+ * may be held.
+ */
+export function canMarkTicketHeld(input: {
+  ticket: number
+  drawHasStarted: boolean
+  preStartHeld: Iterable<number>
+  currentlyHeld: boolean
+}): { ok: true } | { ok: false; reason: string } {
+  if (input.currentlyHeld) return { ok: true }
+  if (!input.drawHasStarted) return { ok: true }
+  const n = Math.floor(input.ticket)
+  if (toSet(input.preStartHeld).has(n)) return { ok: true }
+  return {
+    ok: false,
+    reason: `#${n} can’t be held after Start — only tickets held before Start can be re-held`,
+  }
+}

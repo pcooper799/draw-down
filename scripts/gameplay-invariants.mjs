@@ -27,7 +27,7 @@ function canInsureTicket(ticket, totalTickets, eliminated, heldOut = []) {
 }
 
 /** Hold/restore auction tickets without treating them as drawn-out. */
-function toggleHold(pool, heldOut, eliminated, ticket) {
+function toggleHold(pool, heldOut, eliminated, ticket, opts = {}) {
   if (eliminated.includes(ticket)) return { pool, heldOut, ok: false, reason: 'eliminated' }
   if (heldOut.includes(ticket)) {
     return {
@@ -40,12 +40,26 @@ function toggleHold(pool, heldOut, eliminated, ticket) {
   if (!pool.some((t) => t.number === ticket)) {
     return { pool, heldOut, ok: false, reason: 'missing' }
   }
+  const gate = canMarkTicketHeld({
+    ticket,
+    drawHasStarted: Boolean(opts.drawHasStarted),
+    preStartHeld: opts.preStartHeld || [],
+    currentlyHeld: false,
+  })
+  if (!gate.ok) return { pool, heldOut, ok: false, reason: 'blocked-after-start' }
   return {
     pool: pool.filter((t) => t.number !== ticket),
     heldOut: [ticket, ...heldOut.filter((n) => n !== ticket)],
     ok: true,
     reason: 'held',
   }
+}
+
+function canMarkTicketHeld({ ticket, drawHasStarted, preStartHeld, currentlyHeld }) {
+  if (currentlyHeld) return { ok: true }
+  if (!drawHasStarted) return { ok: true }
+  if (new Set(preStartHeld).has(Math.floor(ticket))) return { ok: true }
+  return { ok: false, reason: 'blocked' }
 }
 
 function pruneInsuranceMarks(marks, totalTickets, eliminated) {
@@ -152,6 +166,23 @@ assert('can insure active', canInsureTicket(4, 10, [3]), null)
   )
   r = toggleHold(r.pool, r.heldOut, eliminated, 4)
   assert('cannot restore eliminated', !r.ok && r.reason === 'eliminated', r)
+
+  // After Start: only pre-start held tickets may be re-held; restore always ok.
+  pool = buildPool(5, new Set())
+  heldOut = []
+  r = toggleHold(pool, heldOut, [], 2, { drawHasStarted: false })
+  assert('pre-start hold ok', r.ok && r.reason === 'held', r)
+  const preStartHeld = [...r.heldOut]
+  pool = r.pool
+  heldOut = r.heldOut
+  r = toggleHold(pool, heldOut, [], 2, { drawHasStarted: true, preStartHeld })
+  assert('restore after start ok', r.ok && r.reason === 'restored', r)
+  pool = r.pool
+  heldOut = r.heldOut
+  r = toggleHold(pool, heldOut, [], 2, { drawHasStarted: true, preStartHeld })
+  assert('re-hold pre-start ticket ok', r.ok && r.reason === 'held', r)
+  r = toggleHold(r.pool, r.heldOut, [], 3, { drawHasStarted: true, preStartHeld })
+  assert('new hold after start blocked', !r.ok && r.reason === 'blocked-after-start', r)
 }
 
 assert(

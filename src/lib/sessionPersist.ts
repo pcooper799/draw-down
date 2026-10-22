@@ -21,6 +21,11 @@ export type SessionSnapshot = {
   eliminated: number[]
   /** Temporarily removed for auction / re-entry; not permanently eliminated. */
   heldOut?: number[]
+  /**
+   * Tickets that were held before the first Start. After Start, only these may
+   * be re-held (restore is always allowed). Optional for older snapshots.
+   */
+  preStartHeld?: number[]
   history: DrawEvent[]
   lastDrawn: DrawEvent | null
   /** Running sessions restore as paused so the operator can resume safely. */
@@ -34,6 +39,7 @@ export type LiveSessionSlice = {
   insuranceMarks: Set<number>
   eliminated: number[]
   heldOut: number[]
+  preStartHeld?: number[]
   history: DrawEvent[]
   lastDrawn: DrawEvent | null
   status: DrawStatus
@@ -68,6 +74,7 @@ export function toSnapshot(live: LiveSessionSlice): SessionSnapshot {
     insuranceMarks: [...live.insuranceMarks].sort((a, b) => a - b),
     eliminated: [...live.eliminated],
     heldOut: [...live.heldOut],
+    preStartHeld: [...(live.preStartHeld ?? [])].sort((a, b) => a - b),
     history: live.history.slice(0, 50),
     lastDrawn: live.lastDrawn,
     status,
@@ -139,6 +146,22 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
       ? data.status
       : 'paused'
 
+  const started =
+    status !== 'idle' ||
+    eliminated.length > 0 ||
+    (Array.isArray(data.history) && data.history.length > 0)
+
+  const preStartHeld = normalizeTicketList(
+    Array.isArray(data.preStartHeld)
+      ? data.preStartHeld
+      : // Older saves: if already mid-event, allow re-hold only for tickets held now.
+        started
+        ? heldOut
+        : [],
+    totalTickets,
+    eliminated,
+  )
+
   return {
     version: SNAPSHOT_VERSION,
     savedAt: typeof data.savedAt === 'string' ? data.savedAt : new Date().toISOString(),
@@ -146,6 +169,7 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
     insuranceMarks,
     eliminated,
     heldOut,
+    preStartHeld,
     history: Array.isArray(data.history) ? (data.history as DrawEvent[]) : [],
     lastDrawn: data.lastDrawn ?? null,
     status,

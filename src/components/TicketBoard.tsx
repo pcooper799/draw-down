@@ -1,5 +1,5 @@
 import { useMemo, type MouseEvent } from 'react'
-import { ticketCellRem } from '@/lib/drawRules'
+import { canMarkTicketHeld, ticketCellRem } from '@/lib/drawRules'
 import { formatTicket } from '@/lib/utils'
 import type { Ticket } from '@/types'
 
@@ -16,6 +16,9 @@ type TicketBoardProps = {
   /** Right-click: hold an in-pool ticket out, or bring a held ticket back. */
   onToggleHold?: (ticket: number) => void
   interactive?: boolean
+  /** After Start, new holds are limited to the pre-start held set. */
+  drawHasStarted?: boolean
+  preStartHeld?: number[]
 }
 
 export function ticketState(
@@ -38,6 +41,8 @@ export function TicketBoard({
   ticketScale = 1,
   onToggleHold,
   interactive = Boolean(onToggleHold),
+  drawHasStarted = false,
+  preStartHeld = [],
 }: TicketBoardProps) {
   const inPool = useMemo(() => {
     const map = new Map<number, Ticket>()
@@ -46,6 +51,7 @@ export function TicketBoard({
   }, [pool])
 
   const held = useMemo(() => new Set(heldOut), [heldOut])
+  const preHeld = useMemo(() => new Set(preStartHeld), [preStartHeld])
 
   const numbers = useMemo(
     () => Array.from({ length: totalTickets }, (_, i) => i + 1),
@@ -81,7 +87,26 @@ export function TicketBoard({
           {numbers.map((n) => {
             const state = ticketState(n, inPool, held)
             const isLast = lastDrawnTicket === n
-            const canToggle = interactive && state !== 'out'
+            const holdGate = canMarkTicketHeld({
+              ticket: n,
+              drawHasStarted,
+              preStartHeld: preHeld,
+              currentlyHeld: state === 'held',
+            })
+            const canToggle =
+              interactive &&
+              state !== 'out' &&
+              (state === 'held' || holdGate.ok)
+            const title =
+              state === 'out'
+                ? `#${n} eliminated`
+                : state === 'held'
+                  ? `#${n} held out (auction) · right-click to bring back`
+                  : !holdGate.ok
+                    ? holdGate.reason
+                    : state === 'insured'
+                      ? `#${n} insured · right-click to hold out`
+                      : `#${n} No-Insurance · right-click to hold out`
             return (
               <div
                 key={n}
@@ -90,16 +115,12 @@ export function TicketBoard({
                 data-last={isLast ? 'true' : undefined}
                 className={`ticket-cell ticket-cell--${state}${isLast ? ' ticket-cell--last' : ''}${
                   canToggle ? ' ticket-cell--interactive' : ''
+                }${
+                  interactive && state !== 'out' && state !== 'held' && !holdGate.ok
+                    ? ' ticket-cell--hold-locked'
+                    : ''
                 }`}
-                title={
-                  state === 'insured'
-                    ? `#${n} insured · right-click to hold out`
-                    : state === 'active'
-                      ? `#${n} No-Insurance · right-click to hold out`
-                      : state === 'held'
-                        ? `#${n} held out (auction) · right-click to bring back`
-                        : `#${n} eliminated`
-                }
+                title={title}
                 onContextMenu={(event) => handleContextMenu(event, n, state)}
               >
                 {formatTicket(n, digits)}

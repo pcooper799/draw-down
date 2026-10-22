@@ -11,6 +11,8 @@ export type BridgeViewState = {
   config: SessionConfig
   pool: Ticket[]
   heldOut: number[]
+  /** Tickets that may be re-held after Start (held before first Start). */
+  preStartHeld?: number[]
   eliminated: number[]
   history: DrawEvent[]
   lastDrawn: DrawEvent | null

@@ -9,6 +9,7 @@ import {
 } from '@/lib/audit'
 import {
   canInsureTicket,
+  canMarkTicketHeld,
   clampPaceMs,
   clampStopAt,
   clampTicketScale,
@@ -88,6 +89,16 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
   }
   const eliminated = snapshot.eliminated.filter((n) => n >= 1 && n <= total)
   const heldOut = normalizeTicketList(snapshot.heldOut ?? [], total, eliminated)
+  const started =
+    snapshot.status !== 'idle' ||
+    eliminated.length > 0 ||
+    snapshot.history.length > 0 ||
+    Boolean(snapshot.eventId && snapshot.status !== 'idle')
+  const preStartHeld = normalizeTicketList(
+    snapshot.preStartHeld ?? (started ? heldOut : []),
+    total,
+    eliminated,
+  )
   const marks = pruneInsuranceMarks(snapshot.insuranceMarks, total, eliminated)
   const audit = createAudit(config, snapshot.eventId)
   return {
@@ -96,6 +107,7 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
     pool: buildPoolFromSnapshot(total, eliminated, marks, heldOut),
     eliminated,
     heldOut,
+    preStartHeld,
     history: snapshot.history,
     lastDrawn: snapshot.lastDrawn,
     status: snapshot.status as DrawStatus,
@@ -129,6 +141,7 @@ function freshYellowFromConfig(config: SessionConfig, notice: string) {
     pool: buildPool(config.totalTickets, empty),
     eliminated: [] as number[],
     heldOut: [] as number[],
+    preStartHeld: [] as number[],
     history: [] as DrawEvent[],
     lastDrawn: null as DrawEvent | null,
     status: 'idle' as DrawStatus,
@@ -174,6 +187,7 @@ export function useDrawSession() {
       pool: buildPool(config.totalTickets, new Set()),
       eliminated: [] as number[],
       heldOut: [] as number[],
+      preStartHeld: [] as number[],
       history: [] as DrawEvent[],
       lastDrawn: null as DrawEvent | null,
       status: 'idle' as DrawStatus,
@@ -188,6 +202,9 @@ export function useDrawSession() {
   const [pool, setPool] = useState<Ticket[]>(() => initial.pool)
   const [eliminated, setEliminated] = useState<number[]>(() => initial.eliminated)
   const [heldOut, setHeldOut] = useState<number[]>(() => initial.heldOut)
+  const [preStartHeld, setPreStartHeld] = useState<number[]>(
+    () => initial.preStartHeld ?? [],
+  )
   const [safePaused, setSafePaused] = useState(false)
   const safePausedRef = useRef(false)
   const [history, setHistory] = useState<DrawEvent[]>(() => initial.history)
@@ -203,17 +220,34 @@ export function useDrawSession() {
   const [seedRevealed, setSeedRevealed] = useState(() => initial.audit.seed.revealed)
 
   const timerRef = useRef<number | null>(null)
+  const leadInTimerRef = useRef<number | null>(null)
+  const leadInActiveRef = useRef(false)
+  const leadInResolveRef = useRef<(() => void) | null>(null)
+  const preStartHeldFrozenRef = useRef(false)
   const poolRef = useRef(pool)
   const statusRef = useRef(status)
   const configRef = useRef(config)
   const insuranceRef = useRef(insuranceMarks)
   const eliminatedRef = useRef(eliminated)
   const heldOutRef = useRef(heldOut)
+  const preStartHeldRef = useRef<Set<number>>(new Set(initial.preStartHeld ?? []))
   const historyRef = useRef(history)
   const lastDrawnRef = useRef(lastDrawn)
   const auditRef = useRef(initial.audit)
   const readyToAutosave = useRef(false)
   const drawLockRef = useRef(false)
+
+  // Freeze pre-start held set once the event has already progressed (restored mid-draw).
+  const [preStartHeldFrozen] = useState(
+    () =>
+      initial.status === 'running' ||
+      initial.status === 'paused' ||
+      initial.status === 'finished' ||
+      initial.history.length > 0 ||
+      initial.eliminated.length > 0 ||
+      Boolean(initial.audit.seed.commitment),
+  )
+  preStartHeldFrozenRef.current = preStartHeldFrozen
 
   useEffect(() => {
     poolRef.current = pool
@@ -263,6 +297,18 @@ export function useDrawSession() {
     }
   }, [])
 
+  /** Cancel prize-stop continue lead-in without leaving the waiter hung. */
+  const clearLeadIn = useCallback(() => {
+    if (leadInTimerRef.current != null) {
+      window.clearTimeout(leadInTimerRef.current)
+      leadInTimerRef.current = null
+    }
+    leadInActiveRef.current = false
+    const resolve = leadInResolveRef.current
+    leadInResolveRef.current = null
+    resolve?.()
+  }, [])
+
   const syncAuditUi = useCallback(() => {
     setAuditEntries([...auditRef.current.entries])
     setSeedCommitment(auditRef.current.seed.commitment || null)
@@ -273,12 +319,24 @@ export function useDrawSession() {
   const insuredRemaining = useMemo(() => pool.filter((t) => t.insured).length, [pool])
   const digits = String(Math.max(config.totalTickets, 1)).length
 
+  const sessionDrawHasStarted = useCallback(() => {
+    return (
+      statusRef.current === 'running' ||
+      statusRef.current === 'paused' ||
+      statusRef.current === 'finished' ||
+      historyRef.current.length > 0 ||
+      eliminatedRef.current.length > 0 ||
+      Boolean(auditRef.current.seed.commitment)
+    )
+  }, [])
+
   const captureSnapshot = useCallback((): SessionSnapshot => {
     return toSnapshot({
       config: configRef.current,
       insuranceMarks: insuranceRef.current,
       eliminated: eliminatedRef.current,
       heldOut: heldOutRef.current,
+      preStartHeld: [...preStartHeldRef.current],
       history: historyRef.current,
       lastDrawn: lastDrawnRef.current,
       status: statusRef.current,
@@ -454,6 +512,7 @@ export function useDrawSession() {
       },
     ) => {
       clearTimer()
+      clearLeadIn()
       drawLockRef.current = false
       const safeTotal = clampTotalTickets(total, configRef.current.stopAt)
       const pruned = pruneInsuranceMarks(marks, safeTotal, [])
@@ -461,6 +520,8 @@ export function useDrawSession() {
       poolRef.current = nextPool
       eliminatedRef.current = []
       heldOutRef.current = []
+      preStartHeldRef.current = new Set()
+      preStartHeldFrozenRef.current = false
       historyRef.current = []
       lastDrawnRef.current = null
       statusRef.current = 'idle'
@@ -468,6 +529,7 @@ export function useDrawSession() {
       setPool(nextPool)
       setEliminated([])
       setHeldOut([])
+      setPreStartHeld([])
       setHistory([])
       setLastDrawn(null)
       setStatus('idle')
@@ -499,7 +561,7 @@ export function useDrawSession() {
       auditRef.current = engine
       void persistAudit(engine).then(syncAuditUi)
     },
-    [clearTimer, syncAuditUi],
+    [clearLeadIn, clearTimer, syncAuditUi],
   )
 
   const toggleTicketHold = useCallback(
@@ -539,6 +601,10 @@ export function useDrawSession() {
           auctionPrice: null,
           note: 'Held ticket released into draw',
         })
+        if (!preStartHeldFrozenRef.current) {
+          preStartHeldRef.current = new Set(nextHeld)
+          setPreStartHeld(nextHeld)
+        }
         void persistAudit(auditRef.current).then(syncAuditUi)
         setSaveNotice(`#${n} back in the draw`)
         return
@@ -549,8 +615,21 @@ export function useDrawSession() {
         return
       }
 
+      const started = sessionDrawHasStarted()
+      const holdGate = canMarkTicketHeld({
+        ticket: n,
+        drawHasStarted: started,
+        preStartHeld: preStartHeldRef.current,
+        currentlyHeld: false,
+      })
+      if (!holdGate.ok) {
+        setSaveNotice(holdGate.reason)
+        return
+      }
+
       if (statusRef.current === 'running') {
         clearTimer()
+        clearLeadIn()
         drawLockRef.current = false
         statusRef.current = 'paused'
         setStatus('paused')
@@ -570,6 +649,12 @@ export function useDrawSession() {
       heldOutRef.current = nextHeld
       setHeldOut(nextHeld)
 
+      // Before Start, the pre-start held set tracks current holds.
+      if (!preStartHeldFrozenRef.current) {
+        preStartHeldRef.current = new Set(nextHeld)
+        setPreStartHeld(nextHeld)
+      }
+
       auditRef.current.append({
         type: 'hold',
         ticket: n,
@@ -585,6 +670,7 @@ export function useDrawSession() {
         statusRef.current = 'finished'
         setStatus('finished')
         clearTimer()
+        clearLeadIn()
         drawLockRef.current = false
         auditRef.current.append({
           type: 'stop_reached',
@@ -599,7 +685,7 @@ export function useDrawSession() {
       void persistAudit(auditRef.current).then(syncAuditUi)
       setSaveNotice(`#${n} held out — right-click to bring back`)
     },
-    [clearTimer, syncAuditUi],
+    [clearLeadIn, clearTimer, sessionDrawHasStarted, syncAuditUi],
   )
 
   const commitTotalTickets = useCallback(
@@ -721,6 +807,7 @@ export function useDrawSession() {
   const applySnapshot = useCallback(
     (snapshot: SessionSnapshot, notice: string) => {
       clearTimer()
+      clearLeadIn()
       drawLockRef.current = false
       const hydrated = hydrateFromSnapshot(snapshot)
       configRef.current = hydrated.config
@@ -728,6 +815,12 @@ export function useDrawSession() {
       poolRef.current = hydrated.pool
       eliminatedRef.current = hydrated.eliminated
       heldOutRef.current = hydrated.heldOut
+      preStartHeldRef.current = new Set(hydrated.preStartHeld)
+      preStartHeldFrozenRef.current =
+        hydrated.status !== 'idle' ||
+        hydrated.eliminated.length > 0 ||
+        hydrated.history.length > 0 ||
+        Boolean(hydrated.audit.seed.commitment)
       historyRef.current = hydrated.history
       lastDrawnRef.current = hydrated.lastDrawn
       statusRef.current = hydrated.status
@@ -737,6 +830,7 @@ export function useDrawSession() {
       setPool(hydrated.pool)
       setEliminated(hydrated.eliminated)
       setHeldOut(hydrated.heldOut)
+      setPreStartHeld(hydrated.preStartHeld)
       setHistory(hydrated.history)
       setLastDrawn(hydrated.lastDrawn)
       setStatus(hydrated.status)
@@ -748,6 +842,7 @@ export function useDrawSession() {
           insuranceMarks: hydrated.insuranceMarks,
           eliminated: hydrated.eliminated,
           heldOut: hydrated.heldOut,
+          preStartHeld: hydrated.preStartHeld,
           history: hydrated.history,
           lastDrawn: hydrated.lastDrawn,
           status: hydrated.status,
@@ -756,7 +851,7 @@ export function useDrawSession() {
       )
       setSaveNotice(notice)
     },
-    [clearTimer, syncAuditUi],
+    [clearLeadIn, clearTimer, syncAuditUi],
   )
 
   const saveNow = useCallback(() => {
@@ -993,6 +1088,8 @@ export function useDrawSession() {
 
   const scheduleNext = useCallback(() => {
     clearTimer()
+    // Never steal the prize-stop continue lead-in timer / start a pace tick early.
+    if (leadInActiveRef.current) return
     if (statusRef.current !== 'running') return
     if (poolRef.current.length <= configRef.current.stopAt) {
       statusRef.current = 'finished'
@@ -1002,7 +1099,7 @@ export function useDrawSession() {
     }
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null
-      if (statusRef.current !== 'running') return
+      if (statusRef.current !== 'running' || leadInActiveRef.current) return
       void (async () => {
         await drawOnce()
         if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
@@ -1029,6 +1126,14 @@ export function useDrawSession() {
 
       const wasPaused = statusRef.current === 'paused' || statusRef.current === 'finished'
       const resumeDelayMs = opts?.afterPrizeStop ? CONTINUE_RESUME_DELAY_MS : 0
+
+      // Freeze the pre-start held set on first Start so mid-event holds stay limited.
+      if (!preStartHeldFrozenRef.current) {
+        preStartHeldRef.current = new Set(heldOutRef.current)
+        setPreStartHeld([...preStartHeldRef.current])
+        preStartHeldFrozenRef.current = true
+      }
+
       auditRef.current.ensureSeed()
       if (!auditRef.current.seed.commitment) {
         auditRef.current.commitSeed()
@@ -1061,14 +1166,23 @@ export function useDrawSession() {
       void (async () => {
         if (resumeDelayMs > 0) {
           await new Promise<void>((resolve) => {
-            clearTimer()
-            timerRef.current = window.setTimeout(() => {
-              timerRef.current = null
+            clearLeadIn()
+            leadInActiveRef.current = true
+            leadInResolveRef.current = () => {
+              leadInActiveRef.current = false
               resolve()
+            }
+            leadInTimerRef.current = window.setTimeout(() => {
+              leadInTimerRef.current = null
+              const done = leadInResolveRef.current
+              leadInResolveRef.current = null
+              leadInActiveRef.current = false
+              done?.()
             }, resumeDelayMs)
           })
           if (statusRef.current !== 'running') {
             drawLockRef.current = false
+            leadInActiveRef.current = false
             return
           }
         }
@@ -1081,12 +1195,13 @@ export function useDrawSession() {
       })()
       return true
     },
-    [clearTimer, drawOnce, scheduleNext, syncAuditUi],
+    [clearLeadIn, drawOnce, scheduleNext, syncAuditUi],
   )
 
   const pause = useCallback(
     (note = 'Manual pause') => {
       clearTimer()
+      clearLeadIn()
       drawLockRef.current = false
       if (statusRef.current === 'running') {
         statusRef.current = 'paused'
@@ -1105,6 +1220,7 @@ export function useDrawSession() {
             insuranceMarks: insuranceRef.current,
             eliminated: eliminatedRef.current,
             heldOut: heldOutRef.current,
+            preStartHeld: [...preStartHeldRef.current],
             history: historyRef.current,
             lastDrawn: lastDrawnRef.current,
             status: 'paused',
@@ -1115,7 +1231,7 @@ export function useDrawSession() {
       }
       return false
     },
-    [clearTimer, syncAuditUi],
+    [clearLeadIn, clearTimer, syncAuditUi],
   )
 
   /** Instant safe pause — does not reset pool/insurance/history. Resume needs confirm. */
@@ -1163,7 +1279,7 @@ export function useDrawSession() {
   }, [])
 
   useEffect(() => {
-    if (statusRef.current === 'running') {
+    if (statusRef.current === 'running' && !leadInActiveRef.current) {
       scheduleNext()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1171,7 +1287,12 @@ export function useDrawSession() {
 
   useEffect(() => {
     const onVisibility = () => {
-      if (document.hidden && statusRef.current === 'running') {
+      // Skip auto-pause during prize-stop continue lead-in (focus flips are common).
+      if (
+        document.hidden &&
+        statusRef.current === 'running' &&
+        !leadInActiveRef.current
+      ) {
         pause()
         setSaveNotice('Paused — window was hidden (safe for the draw)')
       }
@@ -1180,7 +1301,13 @@ export function useDrawSession() {
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [pause])
 
-  useEffect(() => () => clearTimer(), [clearTimer])
+  useEffect(
+    () => () => {
+      clearTimer()
+      clearLeadIn()
+    },
+    [clearLeadIn, clearTimer],
+  )
 
   return {
     config,
@@ -1193,6 +1320,7 @@ export function useDrawSession() {
     insuranceMarks,
     eliminated,
     heldOut,
+    preStartHeld,
     history,
     status,
     lastDrawn,

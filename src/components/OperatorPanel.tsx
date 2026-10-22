@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   AppWindow,
+  CircleHelp,
   FolderOpen,
   ImagePlus,
   Minus,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react'
 import { AuditPanel } from '@/components/AuditPanel'
 import { EventSetupWizard } from '@/components/EventSetupWizard'
+import { HelpGuideDialog } from '@/components/HelpGuideDialog'
 import { InsuranceManager } from '@/components/InsuranceManager'
 import { ProjectorSafetyMonitor } from '@/components/ProjectorSafetyMonitor'
 import { ResetConfirmDialog } from '@/components/ResetConfirmDialog'
@@ -115,6 +117,7 @@ export function OperatorPanel({
   const loadRef = useRef<HTMLInputElement>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [resumeConfirmOpen, setResumeConfirmOpen] = useState(false)
   const [totalDraft, setTotalDraft] = useState(String(config.totalTickets))
   const [stopDraft, setStopDraft] = useState(String(config.stopAt))
@@ -241,7 +244,19 @@ export function OperatorPanel({
           <p className="font-display text-xl tracking-wide text-[var(--ink)]">Controls</p>
           {licenseBadge}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setHelpOpen(true)}
+            title="Open local operator help guide (offline)"
+            aria-label="Open help guide"
+          >
+            <CircleHelp />
+            Help
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -769,7 +784,8 @@ export function OperatorPanel({
         <section className="operator-section space-y-2">
           <p className="text-xs text-[var(--ink-faint)]">
             Right-click a ticket on the board to hold it out (auction), then right-click again to
-            bring it back in. Drawn-out tickets stay out.
+            bring it back in. After Start, you can only re-hold tickets that were held before Start;
+            new holds are blocked. Drawn-out tickets stay out.
             {session.heldOut.length > 0
               ? ` · ${session.heldOut.length} held now.`
               : ''}
@@ -835,6 +851,8 @@ export function OperatorPanel({
           confirmSafeResume()
         }}
       />
+
+      <HelpGuideDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </aside>
   )
 }

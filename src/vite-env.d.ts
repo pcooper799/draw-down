@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+declare module '*.md?raw' {
+  const content: string
+  export default content
+}
+
 type DrawDownInstallInfo = {
   packaged: boolean
   platform: NodeJS.Platform
