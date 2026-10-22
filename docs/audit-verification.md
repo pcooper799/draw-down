@@ -15,6 +15,8 @@ Draw Down records a tamper-evident, fully offline audit of each event.
 3. Each selection uses SHA-256(seed ‖ counter ‖ domain) with **rejection sampling** for an unbiased index into the **sorted** eligible ticket list.
 4. After the event, **Reveal seed** writes the seed into the audit package so others can replay.
 
+**Deep dive (algorithms, worked example, threat model):** [how-draw-picks-a-number.md](./how-draw-picks-a-number.md)
+
 ## Verification
 Operator panel → **Audit & verification** → **Verify drawing** checks:
 - Hash chain integrity
