@@ -27,6 +27,7 @@ type Props = {
   onResumeDraw: () => void
 }
 
+/** Operator-window stop dialog with next-stop / continue controls. Stage uses StageStopCelebration. */
 export function FinishCelebration({
   open,
   onOpenChange,
@@ -168,7 +169,8 @@ export function FinishCelebration({
                   }}
                 />
                 <p className="text-xs text-[var(--ink-faint)]">
-                  For the next prize tier. Must be 1–{maxNextStop} (below current remaining).
+                  For the next prize tier. Must be 1–{maxNextStop} (below current remaining). After
+                  Continue, the stage waits a few seconds before the next ticket.
                 </p>
                 {continueError && (
                   <p className="text-xs text-[var(--danger)]">{continueError}</p>

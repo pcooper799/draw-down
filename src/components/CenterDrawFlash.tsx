@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatTicket } from '@/lib/utils'
 import type { DrawEvent } from '@/types'
 
@@ -7,6 +7,8 @@ const FLASH_MS = 1600
 /**
  * Full-stage center flash when a ticket is drawn.
  * Distinct motion for eliminated vs insurance-saved returns.
+ * Triggered only by flashKey (a real draw) — never by lastDrawn identity churn
+ * while paused / emergency-stopped / idle.
  */
 export function CenterDrawFlash({
   lastDrawn,
@@ -19,14 +21,23 @@ export function CenterDrawFlash({
 }) {
   const [visible, setVisible] = useState(false)
   const [event, setEvent] = useState<DrawEvent | null>(null)
+  const lastDrawnRef = useRef(lastDrawn)
+  lastDrawnRef.current = lastDrawn
+  const seenKeyRef = useRef(0)
 
   useEffect(() => {
-    if (!lastDrawn || flashKey === 0) return
-    setEvent(lastDrawn)
+    if (flashKey === 0) return
+    // Ignore duplicate / stale keys (bridge republish, remount with same key).
+    if (flashKey <= seenKeyRef.current) return
+    const drawn = lastDrawnRef.current
+    if (!drawn) return
+
+    seenKeyRef.current = flashKey
+    setEvent(drawn)
     setVisible(true)
     const id = window.setTimeout(() => setVisible(false), FLASH_MS)
     return () => window.clearTimeout(id)
-  }, [flashKey, lastDrawn])
+  }, [flashKey])
 
   if (!visible || !event) return null
 

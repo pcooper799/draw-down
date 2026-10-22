@@ -1,5 +1,6 @@
 import { CenterDrawFlash } from '@/components/CenterDrawFlash'
 import { RecentDrawsStrip } from '@/components/RecentDrawsStrip'
+import { StageStopCelebration } from '@/components/StageStopCelebration'
 import { TicketBoard } from '@/components/TicketBoard'
 import { formatTicket } from '@/lib/utils'
 import type { DrawEvent, DrawStatus, Ticket } from '@/types'
@@ -165,6 +166,17 @@ export function StageDisplay({
       </div>
 
       <CenterDrawFlash lastDrawn={lastDrawn} flashKey={flashKey} digits={digits} />
+
+      {finished && (
+        <StageStopCelebration
+          orgName={orgName}
+          brandImageDataUrl={brandImageDataUrl}
+          pool={pool}
+          lastDrawn={lastDrawn}
+          digits={digits}
+          stopAt={stopAt}
+        />
+      )}
     </section>
   )
 }

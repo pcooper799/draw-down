@@ -148,7 +148,9 @@ function useCommandRunner(
           break
         case 'continueWithNewStop': {
           if (!liveOk) break
-          if (s.continueWithNewStop(cmd.stopAt) && cmd.resume) s.start()
+          if (s.continueWithNewStop(cmd.stopAt) && cmd.resume) {
+            s.start({ afterPrizeStop: true })
+          }
           break
         }
         case 'applyConfig':
@@ -191,8 +193,8 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
   const [projectionMode, setProjectionMode] = useState(false)
   const [renewOpen, setRenewOpen] = useState(false)
   const { status, start, pause, remaining, config, saveNow, eliminated, history } = session
-  const finish = useFinishCelebration(status)
   const operatorOnly = role === 'operator'
+  const finish = useFinishCelebration(operatorOnly ? status : 'idle')
 
   const liveEvent = hasLiveEventProgress({
     status,
@@ -385,7 +387,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
           stopAt={session.config.stopAt}
           drawLocked={!license.licensed}
           onContinueWithStop={session.continueWithNewStop}
-          onResumeDraw={() => session.start()}
+          onResumeDraw={() => session.start({ afterPrizeStop: true })}
         />
         {renewOpen && !license.licensed && (
           <ActivationScreen
@@ -499,20 +501,6 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         </div>
       )}
 
-      <FinishCelebration
-        open={finish.open}
-        onOpenChange={finish.setOpen}
-        orgName={session.config.orgName}
-        brandImageDataUrl={session.config.brandImageDataUrl}
-        pool={session.pool}
-        lastDrawn={session.lastDrawn}
-        digits={session.digits}
-        stopAt={session.config.stopAt}
-        drawLocked={!license.licensed}
-        onContinueWithStop={session.continueWithNewStop}
-        onResumeDraw={() => session.start()}
-      />
-
       {renewOpen && !license.licensed && (
         <ActivationScreen
           status={license.status}
@@ -530,7 +518,6 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
 
 function StageMirrorApp() {
   const [view, setView] = useState<BridgeViewState | null>(() => readCachedBridgeState())
-  const finish = useFinishCelebration(view?.status ?? 'idle')
 
   useEffect(() => {
     sendBridgeCommand({ type: 'requestState' })
@@ -715,26 +702,6 @@ function StageMirrorApp() {
         </Button>
       </div>
 
-      <FinishCelebration
-        open={finish.open}
-        onOpenChange={finish.setOpen}
-        orgName={view.config.orgName}
-        brandImageDataUrl={view.config.brandImageDataUrl}
-        pool={view.pool}
-        lastDrawn={view.lastDrawn}
-        digits={view.digits}
-        stopAt={view.config.stopAt}
-        drawLocked={!licensed}
-        onContinueWithStop={(stopAt) => {
-          if (!licensed) return false
-          const ok = view.remaining > stopAt
-          if (ok) sendBridgeCommand({ type: 'continueWithNewStop', stopAt, resume: true })
-          return ok
-        }}
-        onResumeDraw={() => {
-          /* resume already requested with continueWithNewStop */
-        }}
-      />
     </div>
   )
 }

@@ -36,6 +36,14 @@ import {
   type Ticket,
 } from '@/types'
 
+/** Pause after operator continues past a prize stop before the next ticket is drawn. */
+export const CONTINUE_RESUME_DELAY_MS = 3000
+
+export type StartOptions = {
+  /** When true, wait CONTINUE_RESUME_DELAY_MS before the first pull (prize-stop continue). */
+  afterPrizeStop?: boolean
+}
+
 function buildPool(total: number, insured: Set<number>): Ticket[] {
   return Array.from({ length: total }, (_, i) => {
     const number = i + 1
@@ -1006,47 +1014,75 @@ export function useDrawSession() {
     }, configRef.current.paceMs)
   }, [clearTimer, drawOnce])
 
-  const start = useCallback(() => {
-    if (statusRef.current === 'running' || drawLockRef.current) return
-    if (safePausedRef.current) {
-      setSaveNotice('Emergency stop is active — confirm Resume in the dialog')
-      return false
-    }
-    if (poolRef.current.length <= configRef.current.stopAt) {
-      statusRef.current = 'finished'
-      setStatus('finished')
-      return false
-    }
-
-    const wasPaused = statusRef.current === 'paused' || statusRef.current === 'finished'
-    auditRef.current.ensureSeed()
-    if (!auditRef.current.seed.commitment) {
-      auditRef.current.commitSeed()
-    }
-    setSeedCommitment(auditRef.current.seed.commitment)
-    auditRef.current.append({
-      type: wasPaused ? 'resume' : 'start',
-      note: wasPaused ? 'Drawing resumed' : 'Drawing started',
-      eligibleBefore: poolRef.current.length,
-      eligibleAfter: poolRef.current.length,
-      stopAt: configRef.current.stopAt,
-      seedCommitment: auditRef.current.seed.commitment,
-    })
-    void persistAudit(auditRef.current).then(syncAuditUi)
-
-    drawLockRef.current = true
-    statusRef.current = 'running'
-    setStatus('running')
-    void (async () => {
-      await drawOnce()
-      if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
-        scheduleNext()
-      } else {
-        drawLockRef.current = false
+  const start = useCallback(
+    (opts?: StartOptions) => {
+      if (statusRef.current === 'running' || drawLockRef.current) return
+      if (safePausedRef.current) {
+        setSaveNotice('Emergency stop is active — confirm Resume in the dialog')
+        return false
       }
-    })()
-    return true
-  }, [drawOnce, scheduleNext, syncAuditUi])
+      if (poolRef.current.length <= configRef.current.stopAt) {
+        statusRef.current = 'finished'
+        setStatus('finished')
+        return false
+      }
+
+      const wasPaused = statusRef.current === 'paused' || statusRef.current === 'finished'
+      const resumeDelayMs = opts?.afterPrizeStop ? CONTINUE_RESUME_DELAY_MS : 0
+      auditRef.current.ensureSeed()
+      if (!auditRef.current.seed.commitment) {
+        auditRef.current.commitSeed()
+      }
+      setSeedCommitment(auditRef.current.seed.commitment)
+      auditRef.current.append({
+        type: wasPaused ? 'resume' : 'start',
+        note:
+          wasPaused && resumeDelayMs > 0
+            ? `Drawing resumed after prize stop (${resumeDelayMs}ms lead-in)`
+            : wasPaused
+              ? 'Drawing resumed'
+              : 'Drawing started',
+        eligibleBefore: poolRef.current.length,
+        eligibleAfter: poolRef.current.length,
+        stopAt: configRef.current.stopAt,
+        seedCommitment: auditRef.current.seed.commitment,
+        details: resumeDelayMs > 0 ? { resumeDelayMs } : undefined,
+      })
+      void persistAudit(auditRef.current).then(syncAuditUi)
+
+      drawLockRef.current = true
+      statusRef.current = 'running'
+      setStatus('running')
+      if (resumeDelayMs > 0) {
+        setSaveNotice(
+          `Continuing in ${Math.round(resumeDelayMs / 1000)}s — next stop at ${configRef.current.stopAt}`,
+        )
+      }
+      void (async () => {
+        if (resumeDelayMs > 0) {
+          await new Promise<void>((resolve) => {
+            clearTimer()
+            timerRef.current = window.setTimeout(() => {
+              timerRef.current = null
+              resolve()
+            }, resumeDelayMs)
+          })
+          if (statusRef.current !== 'running') {
+            drawLockRef.current = false
+            return
+          }
+        }
+        await drawOnce()
+        if (statusRef.current === 'running' && poolRef.current.length > configRef.current.stopAt) {
+          scheduleNext()
+        } else {
+          drawLockRef.current = false
+        }
+      })()
+      return true
+    },
+    [clearTimer, drawOnce, scheduleNext, syncAuditUi],
+  )
 
   const pause = useCallback(
     (note = 'Manual pause') => {

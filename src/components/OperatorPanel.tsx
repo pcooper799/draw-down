@@ -747,7 +747,7 @@ export function OperatorPanel({
                         const parsed = Number.parseInt(prizeStopDraft, 10)
                         if (!Number.isFinite(parsed)) return
                         if (continueWithNewStop(parsed)) {
-                          start()
+                          start({ afterPrizeStop: true })
                         }
                       }}
                     >
@@ -756,7 +756,7 @@ export function OperatorPanel({
                   </div>
                   <p className="text-xs text-[var(--ink-faint)]">
                     Set a lower stop (1–{Math.max(1, remaining - 1)}) for the next prize, then keep
-                    drawing.
+                    drawing. The stage waits a few seconds after Continue before the next ticket.
                   </p>
                 </div>
               ) : (
