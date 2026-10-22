@@ -712,32 +712,74 @@ async function phaseCrashDurability(vite: ChildProcess) {
       const tmpLeft = listAuditFiles().filter((f) => f.endsWith('.tmp'))
       const diskAfterKill = readLatestAuditPackage()
 
+      // Clear Chromium localStorage to force durable-only recovery path
+      // (simulate lost localStorage after SIGKILL)
+      const clearLocal = true
+
       // Relaunch recovery
       app = await launchApp()
       const wins2 = await waitForWindows(app, 2)
       const classified = await classifyWindows(wins2)
       const op2 = classified.operator
+      const stage2 = classified.stage
       if (!op2) {
         record(`Crash — ${sc.name} recovery window`, 'FAIL', 'operator missing after relaunch')
         await app.close().catch(() => {})
         continue
       }
       await op2.waitForLoadState('domcontentloaded')
-      await sleep(1500)
+      await waitStable(op2, 2000)
+
+      if (clearLocal) {
+        // Wipe session/audit keys then reload operator so discovery sees durable-only
+        await op2.evaluate(() => {
+          const keys = Object.keys(localStorage).filter(
+            (k) =>
+              k.startsWith('draw-down.session') ||
+              k.startsWith('draw-down.audit.local') ||
+              k.startsWith('draw-down.bridge'),
+          )
+          for (const k of keys) localStorage.removeItem(k)
+        })
+        await op2.reload({ waitUntil: 'domcontentloaded' })
+        await waitStable(op2, 2000)
+      }
+
+      // Recovery dialog → Restore event
+      const restoreBtn = op2.getByRole('button', { name: /Restore event/i })
+      let restoredViaDialog = false
+      try {
+        await restoreBtn.waitFor({ state: 'visible', timeout: 12_000 })
+        await restoreBtn.click()
+        restoredViaDialog = true
+        await sleep(1500)
+      } catch {
+        // Dialog may not appear if autosave already matched — still check state
+      }
+
       const after = await readOperatorState(op2)
       const diskAfter = readLatestAuditPackage()
-
       await op2.screenshot({ path: join(EVIDENCE, `crash-${sc.name}-recovered.png`) }).catch(() => {})
+      if (stage2) {
+        await stage2.screenshot({ path: join(EVIDENCE, `crash-${sc.name}-stage.png`) }).catch(() => {})
+      }
 
-      // Analyze duplicates in disk audit
       const nums = diskAfter?.selectionNumbers ?? []
       const dupes = nums.filter((n, i) => nums.indexOf(n) !== i)
       const uniqueOk = dupes.length === 0
+      const expectedDraws = diskAfter?.drawSelections ?? diskBefore?.drawSelections ?? 0
+      const localAuditDraws =
+        after.audits.find((a) => a.eventId === diskAfter?.eventId)?.draws ??
+        after.audits[0]?.draws ??
+        0
 
-      // Session vs audit draw count consistency
-      const sessionDrawish = Math.max(after.sessionEliminated, after.sessionHistory)
-      const auditDraws = after.audits[0]?.draws ?? diskAfter?.drawSelections ?? 0
-      const sessionAuditGap = Math.abs(sessionDrawish - (after.bridgeEliminated || sessionDrawish))
+      const restoredMid =
+        (after.sessionStatus === 'paused' || after.bridgeStatus === 'paused') &&
+        (after.sessionEliminated > 0 || localAuditDraws > 0)
+      const countsMatch =
+        expectedDraws > 0 &&
+        localAuditDraws === expectedDraws &&
+        after.sessionEliminated <= expectedDraws
 
       const result = {
         scenario: sc.name,
@@ -749,8 +791,11 @@ async function phaseCrashDurability(vite: ChildProcess) {
         diskAfter,
         dupes,
         uniqueOk,
-        sessionDrawish,
-        auditDraws,
+        restoredViaDialog,
+        expectedDraws,
+        localAuditDraws,
+        restoredMid,
+        countsMatch,
       }
       scenarioResults.push(result)
       writeFileSync(join(EVIDENCE, `crash-${sc.name}.json`), JSON.stringify(result, null, 2))
@@ -771,73 +816,39 @@ async function phaseCrashDurability(vite: ChildProcess) {
         })
       }
 
-      // User-visible recovery = session/localStorage restored mid-event (not merely disk file existence)
-      const restoredMid =
-        after.sessionStatus === 'paused' ||
-        after.bridgeStatus === 'paused' ||
-        after.sessionEliminated > 0 ||
-        after.sessionHistory > 0 ||
-        auditDraws > 0
       record(
-        `Crash — ${sc.name} session/localStorage restored mid-event`,
-        restoredMid ? 'PASS' : 'FAIL',
-        `sessionStatus=${after.sessionStatus} elim=${after.sessionEliminated} hist=${after.sessionHistory} diskDraws=${diskAfter?.drawSelections ?? 0} localAuditDraws=${auditDraws}`,
+        `Crash — ${sc.name} recovery dialog restore paused mid-event`,
+        restoredMid && countsMatch ? 'PASS' : 'FAIL',
+        `dialog=${restoredViaDialog} status=${after.sessionStatus}/${after.bridgeStatus} elim=${after.sessionEliminated} localDraws=${localAuditDraws} diskDraws=${expectedDraws}`,
       )
-      if (!restoredMid && (diskAfter?.drawSelections ?? 0) > 0) {
+      if (!(restoredMid && countsMatch)) {
         defect({
           severity: 'Critical',
-          title: `SIGKILL lost session; disk audit not rehydrated (${sc.name})`,
-          steps: 'Draw several tickets; kill -9; relaunch same userData',
-          expected: 'App restores paused mid-event from durable audit and/or flushed session',
-          actual: `UI/session idle; disk had ${diskAfter?.drawSelections} draw_selection entries`,
-          where: 'useDrawSession boot (readAutosave/readLocalAudit only); auditLoad unused',
+          title: `Recovery did not restore exact committed state (${sc.name})`,
+          steps: 'SIGKILL mid-draw; clear localStorage; relaunch; Restore event',
+          expected: `Paused mid-event with ${expectedDraws} committed draws`,
+          actual: `status=${after.sessionStatus} elim=${after.sessionEliminated} localDraws=${localAuditDraws}`,
+          where: 'discoverRecoveryCandidates / applyDurableRecovery',
         })
       }
 
-      // Disk durable file exists when local audit exists
-      if (auditDraws > 0 && !diskAfter) {
-        defect({
-          severity: 'High',
-          title: `Local audit has draws but no durable disk file (${sc.name})`,
-          steps: 'Kill during event; inspect userData/audits',
-          expected: 'audit-save rename completed for committed draws',
-          actual: `localAuditDraws=${auditDraws} disk=null tmp=${tmpLeft.join(',')}`,
-          where: 'electron audit-save IPC / flushAuditDurable',
-        })
-        record(`Crash — ${sc.name} durable disk mirror`, 'FAIL', `local=${auditDraws} disk=missing`)
-      } else {
-        record(
-          `Crash — ${sc.name} durable disk mirror`,
-          diskAfter ? 'PASS' : auditDraws === 0 ? 'PASS' : 'FAIL',
-          `diskDraws=${diskAfter?.drawSelections ?? 0} local=${auditDraws} tmp=${tmpLeft.length}`,
-        )
-      }
+      record(
+        `Crash — ${sc.name} durable disk mirror`,
+        diskAfter && expectedDraws > 0 ? 'PASS' : 'FAIL',
+        `diskDraws=${diskAfter?.drawSelections ?? 0} tmp=${tmpLeft.length}`,
+      )
 
-      // auditLoad never wired — note if disk > local (orphaned durable truth)
-      if (
-        diskAfter &&
-        auditDraws >= 0 &&
-        diskAfter.drawSelections > auditDraws &&
-        after.sessionEliminated < diskAfter.drawSelections
-      ) {
-        defect({
-          severity: 'Critical',
-          title: 'Durable disk audit ahead of recovered session/localStorage (auditLoad unused)',
-          steps: `${sc.name}: kill during persist; relaunch; compare disk audits/*.json vs localStorage audit/session`,
-          expected: 'Recovery uses durable audit as source of truth (or keeps session+audit consistent)',
-          actual: `diskDraws=${diskAfter.drawSelections} localAudit=${auditDraws} sessionElim=${after.sessionEliminated}`,
-          where: 'auditLoad exposed in preload but never called; boot uses readAutosave/readLocalAudit only',
-        })
+      // Stage sync after restore
+      if (stage2 && restoredMid) {
+        await sleep(800)
+        const st = await snapStage(stage2).catch(() => null)
+        const stageOk =
+          st != null &&
+          (st.remaining === after.bridgeRemaining || after.bridgeRemaining == null)
         record(
-          `Crash — ${sc.name} disk vs session consistency`,
-          'FAIL',
-          `disk=${diskAfter.drawSelections} local=${auditDraws} sessionElim=${after.sessionEliminated}`,
-        )
-      } else {
-        record(
-          `Crash — ${sc.name} disk vs session consistency`,
-          'PASS',
-          `disk=${diskAfter?.drawSelections ?? 0} local=${auditDraws} sessionElim=${after.sessionEliminated} gapNote=${sessionAuditGap}`,
+          `Crash — ${sc.name} stage synced after restore`,
+          stageOk || after.bridgeStatus === 'paused' ? 'PASS' : 'FAIL',
+          `stageRem=${st?.remaining} bridgeRem=${after.bridgeRemaining} bridgeStatus=${after.bridgeStatus}`,
         )
       }
 
@@ -858,27 +869,16 @@ async function phaseCrashDurability(vite: ChildProcess) {
 
   writeFileSync(join(EVIDENCE, 'crash-scenarios.json'), JSON.stringify(scenarioResults, null, 2))
 
-  // Code-level finding: auditLoad unused
-  const persistSrc = readFileSync(join(ROOT, 'src/lib/audit/persist.ts'), 'utf8')
-  const appUsesLoad = readFileSync(join(ROOT, 'src/hooks/useDrawSession.ts'), 'utf8').includes('auditLoad')
-  record(
-    'Crash — production boots from durable auditLoad',
-    appUsesLoad ? 'PASS' : 'FAIL',
-    appUsesLoad
-      ? 'useDrawSession references auditLoad'
-      : 'auditLoad is preload-only; recovery uses localStorage autosave + readLocalAudit only',
+  const discoverSrc = readFileSync(join(ROOT, 'src/lib/audit/recoveryDiscover.ts'), 'utf8')
+  const appUsesList = discoverSrc.includes('listDurableAudits')
+  const appUsesApply = readFileSync(join(ROOT, 'src/hooks/useDrawSession.ts'), 'utf8').includes(
+    'applyDurableRecovery',
   )
-  if (!appUsesLoad) {
-    defect({
-      severity: 'High',
-      title: 'Durable audit files are written but never loaded on recovery',
-      steps: 'Code inspection + crash relaunch',
-      expected: 'On boot, if localStorage incomplete, hydrate from userData/audits via auditLoad',
-      actual: 'flushAuditDurable→auditSave writes disk; no renderer calls auditLoad',
-      where: 'electron/preload auditLoad; src/lib/audit/persist.ts flushAuditDurable; useDrawSession boot',
-    })
-  }
-  void persistSrc
+  record(
+    'Crash — production discovers durable audits on boot',
+    appUsesList && appUsesApply ? 'PASS' : 'FAIL',
+    `listDurableAudits=${appUsesList} applyDurableRecovery=${appUsesApply}`,
+  )
 }
 
 async function main() {

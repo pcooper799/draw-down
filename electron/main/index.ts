@@ -405,7 +405,14 @@ ipcMain.handle('draw-down:audit-save', async (_event, blob: { package: { eventId
     if (!id) return { ok: false, reason: 'missing eventId' }
     const file = path.join(auditsDir(), `${id}.json`)
     const tmp = `${file}.tmp`
-    await fsp.writeFile(tmp, JSON.stringify(blob), 'utf8')
+    const payload = JSON.stringify(blob)
+    const fh = await fsp.open(tmp, 'w')
+    try {
+      await fh.writeFile(payload, 'utf8')
+      await fh.sync()
+    } finally {
+      await fh.close()
+    }
     await fsp.rename(tmp, file)
     return { ok: true, path: file }
   } catch (error) {
@@ -420,6 +427,49 @@ ipcMain.handle('draw-down:audit-load', async (_event, eventId: string) => {
     return { ok: true, blob: JSON.parse(text) }
   } catch {
     return { ok: false, blob: null }
+  }
+})
+ipcMain.handle('draw-down:audit-list', async () => {
+  try {
+    await ensureAuditsDir()
+    const dir = auditsDir()
+    const names = await fsp.readdir(dir)
+    const items: Array<{ eventId: string; mtimeMs: number; blob: unknown }> = []
+    for (const name of names) {
+      if (!name.endsWith('.json') || name.endsWith('.tmp')) continue
+      const file = path.join(dir, name)
+      try {
+        const [text, st] = await Promise.all([fsp.readFile(file, 'utf8'), fsp.stat(file)])
+        const blob = JSON.parse(text) as { package?: { eventId?: string } }
+        const eventId = String(blob?.package?.eventId || name.replace(/\.json$/i, ''))
+        items.push({ eventId, mtimeMs: st.mtimeMs, blob })
+      } catch {
+        // skip corrupt individual files
+      }
+    }
+    items.sort((a, b) => b.mtimeMs - a.mtimeMs)
+    return { ok: true, items }
+  } catch (error) {
+    return {
+      ok: false,
+      items: [],
+      reason: error instanceof Error ? error.message : 'audit list failed',
+    }
+  }
+})
+ipcMain.handle('draw-down:audit-archive', async (_event, eventId: string) => {
+  try {
+    await ensureAuditsDir()
+    const id = String(eventId || '').replace(/[^\w.-]/g, '_')
+    if (!id) return { ok: false, reason: 'missing eventId' }
+    const file = path.join(auditsDir(), `${id}.json`)
+    const archiveDir = path.join(auditsDir(), 'archived')
+    await fsp.mkdir(archiveDir, { recursive: true })
+    const dest = path.join(archiveDir, `${id}-${Date.now()}.json`)
+    await fsp.rename(file, dest)
+    return { ok: true, path: dest }
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : 'audit archive failed' }
   }
 })
 ipcMain.on('draw-down:bridge', (event, message) => {

@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppWindow, Minus, PanelRightOpen, Plus } from 'lucide-react'
 import { ActivationScreen, LicenseBadge } from '@/components/ActivationScreen'
+import { EventRecoveryDialog } from '@/components/EventRecoveryDialog'
 import { FinishCelebration, useFinishCelebration } from '@/components/FinishCelebration'
 import { OperatorPanel } from '@/components/OperatorPanel'
 import { StageDisplay } from '@/components/StageDisplay'
 import { Button } from '@/components/ui/button'
+import {
+  archiveDurableAudit,
+  discoverRecoveryCandidates,
+  downloadAuditJson,
+  markRecoveryDismissed,
+  type RecoveryCandidate,
+} from '@/lib/audit'
 import { useDrawSession, type DrawSession } from '@/hooks/useDrawSession'
 import {
   hasLiveEventProgress,
@@ -194,9 +202,43 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
   const session = useDrawSession()
   const [projectionMode, setProjectionMode] = useState(false)
   const [renewOpen, setRenewOpen] = useState(false)
+  const [recoveryCandidate, setRecoveryCandidate] = useState<RecoveryCandidate | null>(null)
+  const [recoveryOpen, setRecoveryOpen] = useState(false)
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
+  const [recoveryError, setRecoveryError] = useState<string | null>(null)
   const { status, start, pause, remaining, config, saveNow, eliminated, history } = session
   const operatorOnly = role === 'operator'
   const finish = useFinishCelebration(operatorOnly ? status : 'idle')
+
+  // Crash recovery: durable audits ahead of localStorage (operator/combined only).
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const candidates = await discoverRecoveryCandidates()
+        if (cancelled || !candidates.length) return
+        // Prefer most recent durable progress
+        const top = candidates[0]!
+        try {
+          localStorage.removeItem('draw-down.bridge.state.v1')
+        } catch {
+          // ignore
+        }
+        setRecoveryCandidate(top)
+        setRecoveryOpen(true)
+        setRecoveryError(
+          top.reconstructed.verify.ok
+            ? null
+            : 'Audit verification failed — restore blocked. Use Review audit or archive.',
+        )
+      } catch {
+        // Non-Electron / discovery failure — ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const liveEvent = hasLiveEventProgress({
     status,
@@ -368,6 +410,58 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
     </div>
   ) : null
 
+  const recoveryDialog = (
+    <EventRecoveryDialog
+      open={recoveryOpen && Boolean(recoveryCandidate)}
+      candidate={recoveryCandidate}
+      liveDrawAllowed={license.licensed}
+      busy={recoveryBusy}
+      error={recoveryError}
+      onRestore={() => {
+        if (!recoveryCandidate) return
+        if (!recoveryCandidate.reconstructed.verify.ok) {
+          setRecoveryError('Audit verification failed — cannot restore unsafely.')
+          return
+        }
+        setRecoveryBusy(true)
+        setRecoveryError(null)
+        const result = session.applyDurableRecovery(recoveryCandidate.blob)
+        setRecoveryBusy(false)
+        if (!result.ok) {
+          setRecoveryError(result.reason || 'Restore failed')
+          return
+        }
+        setRecoveryOpen(false)
+        setRecoveryCandidate(null)
+      }}
+      onReviewAudit={() => {
+        if (!recoveryCandidate) return
+        downloadAuditJson(recoveryCandidate.blob.package)
+      }}
+      onDiscard={() => {
+        if (!recoveryCandidate) return
+        const ok = window.confirm(
+          'Hide recovery for this event and archive the durable audit file?\n\n' +
+            'The audit evidence is moved to an archive folder — it is not deleted.\n' +
+            'You will not be prompted again for this event on this PC.',
+        )
+        if (!ok) return
+        setRecoveryBusy(true)
+        void (async () => {
+          await archiveDurableAudit(recoveryCandidate.eventId)
+          markRecoveryDismissed(recoveryCandidate.eventId)
+          setRecoveryBusy(false)
+          setRecoveryOpen(false)
+          setRecoveryCandidate(null)
+        })()
+      }}
+      onDismiss={() => {
+        // Keep durable file; only close dialog for this session (will reappear next launch)
+        setRecoveryOpen(false)
+      }}
+    />
+  )
+
   if (operatorOnly) {
     return (
       <div className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--panel)] text-[var(--ink)]">
@@ -391,6 +485,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
           onContinueWithStop={session.continueWithNewStop}
           onResumeDraw={() => session.start({ afterPrizeStop: true })}
         />
+        {recoveryDialog}
         {renewOpen && !license.licensed && (
           <ActivationScreen
             status={license.status}
@@ -504,6 +599,8 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
           </Button>
         </div>
       )}
+
+      {recoveryDialog}
 
       {renewOpen && !license.licensed && (
         <ActivationScreen

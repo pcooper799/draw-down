@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AuditEngine,
+  buildRecoveryAttachment,
   flushAuditDurable,
+  localAuditKey,
   readLocalAudit,
+  reconstructFromDurableBlob,
   validateEligiblePool,
   writeLocalAudit,
   type AuditEntry,
+  type LocalAuditBlob,
 } from '@/lib/audit'
 import {
   canInsureTicket,
@@ -68,6 +72,7 @@ function createAudit(config: SessionConfig, eventId?: string) {
       startingTickets: config.totalTickets,
       stopAt: config.stopAt,
       paceMs: config.paceMs,
+      orgName: config.orgName,
     },
     eligibleBefore: config.totalTickets,
     eligibleAfter: config.totalTickets,
@@ -116,8 +121,12 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
   }
 }
 
-async function persistAudit(engine: AuditEngine) {
-  const blob = writeLocalAudit(engine)
+async function persistAudit(engine: AuditEngine, config: SessionConfig) {
+  // Ticket state in recovery is derived from the audit chain (post-append),
+  // so a crash after this write cannot lose a committed draw that disk retained.
+  const base = engine.toLocalPersist() as LocalAuditBlob
+  const recovery = buildRecoveryAttachment(base, config)
+  const blob = writeLocalAudit(engine, recovery)
   await flushAuditDurable(blob)
 }
 
@@ -392,7 +401,7 @@ export function useDrawSession() {
           eligibleAfter: rem,
           details: { prevStopAt: prevStop, nextStopAt: stop },
         })
-        void persistAudit(auditRef.current).then(syncAuditUi)
+        void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
       }
 
       if (statusRef.current === 'finished' && rem > stop) {
@@ -429,7 +438,7 @@ export function useDrawSession() {
         eligibleAfter: rem,
         note: 'Operator continued after stop with new threshold',
       })
-      void persistAudit(auditRef.current).then(syncAuditUi)
+      void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
       return true
     },
     [applyConfig, syncAuditUi],
@@ -481,7 +490,7 @@ export function useDrawSession() {
         eligibleBefore: poolRef.current.length,
         eligibleAfter: poolRef.current.length,
       })
-      void persistAudit(auditRef.current).then(syncAuditUi)
+      void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
     },
     [syncInsuranceIntoPool, syncAuditUi],
   )
@@ -498,7 +507,7 @@ export function useDrawSession() {
       eligibleBefore: poolRef.current.length,
       eligibleAfter: poolRef.current.length,
     })
-    void persistAudit(auditRef.current).then(syncAuditUi)
+    void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
   }, [syncInsuranceIntoPool, syncAuditUi])
 
   const rebuildPool = useCallback(
@@ -560,7 +569,7 @@ export function useDrawSession() {
         operatorId: meta?.resetBy,
       })
       auditRef.current = engine
-      void persistAudit(engine).then(syncAuditUi)
+      void persistAudit(engine, configRef.current).then(syncAuditUi)
     },
     [clearLeadIn, clearTimer, syncAuditUi],
   )
@@ -606,7 +615,7 @@ export function useDrawSession() {
           preStartHeldRef.current = new Set(nextHeld)
           setPreStartHeld(nextHeld)
         }
-        void persistAudit(auditRef.current).then(syncAuditUi)
+        void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
         setSaveNotice(`#${n} back in the draw`)
         return
       }
@@ -683,7 +692,7 @@ export function useDrawSession() {
         })
       }
 
-      void persistAudit(auditRef.current).then(syncAuditUi)
+      void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
       setSaveNotice(`#${n} held out — right-click to bring back`)
     },
     [clearLeadIn, clearTimer, sessionDrawHasStarted, syncAuditUi],
@@ -778,7 +787,7 @@ export function useDrawSession() {
         },
       })
       // Persist the closed/prior event audit before switching to a new event id.
-      void persistAudit(auditRef.current)
+      void persistAudit(auditRef.current, configRef.current)
 
       const empty = new Set<number>()
       insuranceRef.current = empty
@@ -858,7 +867,7 @@ export function useDrawSession() {
   const saveNow = useCallback(() => {
     const snapshot = captureSnapshot()
     writeAutosave(snapshot)
-    void persistAudit(auditRef.current)
+    void persistAudit(auditRef.current, configRef.current)
     setLastSavedAt(snapshot.savedAt)
     setSaveNotice('Session saved')
     return snapshot
@@ -956,7 +965,7 @@ export function useDrawSession() {
         eligibleBefore: currentPool.length,
         eligibleAfter: currentPool.length,
       })
-      await persistAudit(auditRef.current)
+      await persistAudit(auditRef.current, configRef.current)
       syncAuditUi()
       setSaveNotice(`Draw halted — ${validation.reason}`)
       return
@@ -1002,7 +1011,7 @@ export function useDrawSession() {
       })
 
       // Durable commit BEFORE UI mutation
-      await persistAudit(auditRef.current)
+      await persistAudit(auditRef.current, configRef.current)
       syncAuditUi()
       setSeedCommitment(auditRef.current.seed.commitment)
 
@@ -1066,7 +1075,7 @@ export function useDrawSession() {
             threshold: cfg.stopAt,
           },
         })
-        await persistAudit(auditRef.current)
+        await persistAudit(auditRef.current, configRef.current)
         syncAuditUi()
       }
     } catch (error) {
@@ -1081,7 +1090,7 @@ export function useDrawSession() {
         eligibleBefore: currentPool.length,
         eligibleAfter: currentPool.length,
       })
-      await persistAudit(auditRef.current)
+      await persistAudit(auditRef.current, configRef.current)
       syncAuditUi()
       setSaveNotice(`Draw halted — ${message}`)
     }
@@ -1154,7 +1163,7 @@ export function useDrawSession() {
         seedCommitment: auditRef.current.seed.commitment,
         details: resumeDelayMs > 0 ? { resumeDelayMs } : undefined,
       })
-      void persistAudit(auditRef.current).then(syncAuditUi)
+      void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
 
       drawLockRef.current = true
       statusRef.current = 'running'
@@ -1214,7 +1223,7 @@ export function useDrawSession() {
           eligibleAfter: poolRef.current.length,
           stopAt: configRef.current.stopAt,
         })
-        void persistAudit(auditRef.current).then(syncAuditUi)
+        void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
         writeAutosave(
           toSnapshot({
             config: configRef.current,
@@ -1250,7 +1259,7 @@ export function useDrawSession() {
         stopAt: configRef.current.stopAt,
         details: { emergency: true },
       })
-      void persistAudit(auditRef.current).then(syncAuditUi)
+      void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
     }
     setSaveNotice('EMERGENCY STOP — draw held; confirm to resume')
   }, [pause, syncAuditUi])
@@ -1265,7 +1274,7 @@ export function useDrawSession() {
   const revealAuditSeed = useCallback(async () => {
     try {
       const hex = auditRef.current.revealSeed()
-      await persistAudit(auditRef.current)
+      await persistAudit(auditRef.current, configRef.current)
       syncAuditUi()
       setSaveNotice('Audit seed revealed for verification')
       return hex
@@ -1278,6 +1287,48 @@ export function useDrawSession() {
   const exportAuditPackage = useCallback(() => {
     return auditRef.current.toPackage()
   }, [])
+
+  /**
+   * Restore from a verified durable audit blob. Always lands paused (never auto-resumes).
+   * Writes localStorage from the blob first so AuditEngine picks up localSeedHex.
+   */
+  const applyDurableRecovery = useCallback(
+    (blob: LocalAuditBlob) => {
+      const result = reconstructFromDurableBlob(blob, configRef.current)
+      if (!result.ok) {
+        setSaveNotice(result.reason)
+        return { ok: false as const, reason: result.reason, verify: result.verify }
+      }
+      clearTimer()
+      clearLeadIn()
+      drawLockRef.current = false
+      try {
+        localStorage.setItem(localAuditKey(blob.package.eventId), JSON.stringify(blob))
+      } catch {
+        // continue — engine may still load from provided blob via write below
+      }
+      writeLocalAudit(
+        AuditEngine.fromLocalPersist(blob),
+        buildRecoveryAttachment(blob, {
+          ...result.snapshot.config,
+          brandImageDataUrl: configRef.current.brandImageDataUrl,
+          ticketScale: configRef.current.ticketScale,
+          prizeTiers: configRef.current.prizeTiers,
+        }),
+      )
+
+      const snapshot: SessionSnapshot = {
+        ...result.snapshot,
+        status: result.snapshot.status === 'finished' ? 'finished' : 'paused',
+      }
+      applySnapshot(snapshot, 'Recovered from durable audit — paused (confirm to resume)')
+      safePausedRef.current = true
+      setSafePaused(true)
+      void persistAudit(auditRef.current, configRef.current).then(syncAuditUi)
+      return { ok: true as const, snapshot, reconstructed: result }
+    },
+    [applySnapshot, clearLeadIn, clearTimer, syncAuditUi],
+  )
 
   useEffect(() => {
     if (statusRef.current === 'running' && !leadInActiveRef.current) {
@@ -1353,6 +1404,7 @@ export function useDrawSession() {
     seedRevealed,
     revealAuditSeed,
     exportAuditPackage,
+    applyDurableRecovery,
     getAuditEngine: () => auditRef.current,
   }
 }

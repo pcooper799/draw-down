@@ -69,6 +69,15 @@ contextBridge.exposeInMainWorld('drawDown', {
     eventId: string,
   ): Promise<{ ok: boolean; blob: unknown | null }> =>
     ipcRenderer.invoke('draw-down:audit-load', eventId),
+  auditList: (): Promise<{
+    ok: boolean
+    items: Array<{ eventId: string; mtimeMs: number; blob: unknown }>
+    reason?: string
+  }> => ipcRenderer.invoke('draw-down:audit-list'),
+  auditArchive: (
+    eventId: string,
+  ): Promise<{ ok: boolean; path?: string; reason?: string }> =>
+    ipcRenderer.invoke('draw-down:audit-archive', eventId),
   bridgePublish: (message: unknown) => {
     ipcRenderer.send('draw-down:bridge', message)
   },

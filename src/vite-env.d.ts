@@ -69,6 +69,12 @@ interface Window {
     ) => Promise<{ ok: boolean; reason?: string; status?: DrawDownStageDisplayStatus }>
     auditSave?: (blob: unknown) => Promise<{ ok: boolean; path?: string; reason?: string }>
     auditLoad?: (eventId: string) => Promise<{ ok: boolean; blob: unknown | null }>
+    auditList?: () => Promise<{
+      ok: boolean
+      items: Array<{ eventId: string; mtimeMs: number; blob: unknown }>
+      reason?: string
+    }>
+    auditArchive?: (eventId: string) => Promise<{ ok: boolean; path?: string; reason?: string }>
     bridgePublish?: (message: unknown) => void
     onBridgeMessage?: (handler: (message: unknown) => void) => () => void
   }
