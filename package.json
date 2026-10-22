@@ -1,6 +1,6 @@
 {
   "name": "draw-down",
-  "version": "0.3.9",
+  "version": "0.4.3",
   "private": true,
   "description": "Windows desktop event app for ticket draw-downs with insurance.",
   "author": {
