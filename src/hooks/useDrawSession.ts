@@ -94,10 +94,11 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
     eliminated.length > 0 ||
     snapshot.history.length > 0 ||
     Boolean(snapshot.eventId && snapshot.status !== 'idle')
+  // Keep the frozen pre-start hold permission set intact even if some of those
+  // tickets were later eliminated (BUG-001). Hold/restore/draw still reject outs.
   const preStartHeld = normalizeTicketList(
     snapshot.preStartHeld ?? (started ? heldOut : []),
     total,
-    eliminated,
   )
   const marks = pruneInsuranceMarks(snapshot.insuranceMarks, total, eliminated)
   const audit = createAudit(config, snapshot.eventId)

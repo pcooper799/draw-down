@@ -151,6 +151,9 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
     eliminated.length > 0 ||
     (Array.isArray(data.history) && data.history.length > 0)
 
+  // Permission set must survive elimination of former pre-start holds.
+  // Range/dedupe only — do not prune against `eliminated` (BUG-001).
+  // heldOut / insurance / pool building still exclude eliminated tickets.
   const preStartHeld = normalizeTicketList(
     Array.isArray(data.preStartHeld)
       ? data.preStartHeld
@@ -159,7 +162,6 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
         ? heldOut
         : [],
     totalTickets,
-    eliminated,
   )
 
   return {

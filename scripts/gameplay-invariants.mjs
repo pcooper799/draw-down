@@ -183,6 +183,22 @@ assert('can insure active', canInsureTicket(4, 10, [3]), null)
   assert('re-hold pre-start ticket ok', r.ok && r.reason === 'held', r)
   r = toggleHold(r.pool, r.heldOut, [], 3, { drawHasStarted: true, preStartHeld })
   assert('new hold after start blocked', !r.ok && r.reason === 'blocked-after-start', r)
+
+  // BUG-001 contract (logic mirror): permission set must not drop eliminated numbers.
+  // Full parseSnapshot coverage lives in scripts/session-persist-invariants.mts.
+  const ten = [3, 11, 19, 27, 33, 41, 55, 66, 88, 99]
+  const elimThree = [3, 11, 19]
+  const permissionKeep = ten.filter((n) => n >= 1 && n <= 400)
+  assert(
+    'preStartHeld permission keeps eliminated members',
+    permissionKeep.length === 10 && elimThree.every((n) => permissionKeep.includes(n)),
+    permissionKeep,
+  )
+  r = toggleHold(buildPool(400, new Set()), [], elimThree, 3, {
+    drawHasStarted: true,
+    preStartHeld: permissionKeep,
+  })
+  assert('eliminated ticket still cannot be held/restored', !r.ok && r.reason === 'eliminated', r)
 }
 
 assert(
