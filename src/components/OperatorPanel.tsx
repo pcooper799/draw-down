@@ -4,12 +4,14 @@ import {
   CircleHelp,
   FolderOpen,
   ImagePlus,
+  LayoutGrid,
   Minus,
   MonitorPlay,
   OctagonAlert,
   Pause,
   Play,
   Plus,
+  Presentation,
   RotateCcw,
   Save,
   Settings2,
@@ -70,6 +72,9 @@ type Props = {
   onFocusStage?: () => void
   /** True when a paid (or dev) license allows live drawing. */
   licensed?: boolean
+  /** Audience welcome cover (org + color meanings) while setting up. */
+  showWelcomeCover?: boolean
+  onToggleWelcomeCover?: () => void
 }
 
 export function OperatorPanel({
@@ -84,6 +89,8 @@ export function OperatorPanel({
   onOpenOperatorWindow,
   onFocusStage,
   licensed = true,
+  showWelcomeCover = false,
+  onToggleWelcomeCover,
 }: Props) {
   const {
     config,
@@ -270,6 +277,25 @@ export function OperatorPanel({
             <Wand2 />
             Wizard
           </Button>
+          {onToggleWelcomeCover && !drawHasStarted && status === 'idle' && (
+            <Button
+              type="button"
+              variant={showWelcomeCover ? 'default' : 'outline'}
+              size="sm"
+              className="gap-2"
+              onClick={onToggleWelcomeCover}
+              title={
+                showWelcomeCover
+                  ? 'Hide welcome cover and show the ticket board'
+                  : 'Show welcome cover on stage (org + color meanings) while you set up'
+              }
+              aria-label={showWelcomeCover ? 'Show ticket board' : 'Show welcome cover'}
+              aria-pressed={showWelcomeCover}
+            >
+              {showWelcomeCover ? <LayoutGrid /> : <Presentation />}
+              {showWelcomeCover ? 'Board' : 'Cover'}
+            </Button>
+          )}
           {separateWindow ? (
             <Button
               type="button"

@@ -61,7 +61,11 @@ function useLicenseGate() {
   return { status, refresh, licensed, isDev: import.meta.env.DEV }
 }
 
-function buildViewState(session: DrawSession, license: LicenseStatus): BridgeViewState {
+function buildViewState(
+  session: DrawSession,
+  license: LicenseStatus,
+  showWelcomeCover: boolean,
+): BridgeViewState {
   return {
     v: 1,
     at: Date.now(),
@@ -81,13 +85,19 @@ function buildViewState(session: DrawSession, license: LicenseStatus): BridgeVie
     license,
     saveNotice: session.saveNotice,
     lastSavedAt: session.lastSavedAt,
+    showWelcomeCover,
   }
 }
 
-function usePublishSession(session: DrawSession, license: LicenseStatus, enabled: boolean) {
+function usePublishSession(
+  session: DrawSession,
+  license: LicenseStatus,
+  enabled: boolean,
+  showWelcomeCover: boolean,
+) {
   useEffect(() => {
     if (!enabled) return
-    publishBridgeState(buildViewState(session, license))
+    publishBridgeState(buildViewState(session, license, showWelcomeCover))
   }, [
     enabled,
     session.config,
@@ -106,6 +116,7 @@ function usePublishSession(session: DrawSession, license: LicenseStatus, enabled
     session.saveNotice,
     session.lastSavedAt,
     license,
+    showWelcomeCover,
   ])
 }
 
@@ -114,11 +125,17 @@ function useCommandRunner(
   licenseRefresh: () => void,
   enabled: boolean,
   liveDrawAllowed: boolean,
+  showWelcomeCover: boolean,
+  setShowWelcomeCover: (visible: boolean) => void,
 ) {
   const sessionRef = useRef(session)
   sessionRef.current = session
   const liveRef = useRef(liveDrawAllowed)
   liveRef.current = liveDrawAllowed
+  const coverRef = useRef(showWelcomeCover)
+  coverRef.current = showWelcomeCover
+  const setCoverRef = useRef(setShowWelcomeCover)
+  setCoverRef.current = setShowWelcomeCover
 
   useEffect(() => {
     if (!enabled) return
@@ -176,13 +193,16 @@ function useCommandRunner(
           licenseRefresh()
           break
         case 'requestState':
-          publishBridgeState(buildViewState(s, getLicenseStatus()))
+          publishBridgeState(buildViewState(s, getLicenseStatus(), coverRef.current))
           break
         case 'focusStage':
           void focusStageWindowElectron()
           break
         case 'showOperator':
           void openOperatorWindowElectron()
+          break
+        case 'setWelcomeCover':
+          setCoverRef.current(cmd.visible)
           break
         default:
           break
@@ -201,6 +221,10 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
   const license = useLicenseGate()
   const session = useDrawSession()
   const [projectionMode, setProjectionMode] = useState(false)
+  /** Audience cover while setting up — defaults on before the first Start. */
+  const [showWelcomeCover, setShowWelcomeCover] = useState(
+    () => !session.drawHasStarted && session.status === 'idle',
+  )
   const [renewOpen, setRenewOpen] = useState(false)
   const [recoveryCandidate, setRecoveryCandidate] = useState<RecoveryCandidate | null>(null)
   const [recoveryOpen, setRecoveryOpen] = useState(false)
@@ -209,6 +233,15 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
   const { status, start, pause, remaining, config, saveNow, eliminated, history } = session
   const operatorOnly = role === 'operator'
   const finish = useFinishCelebration(operatorOnly ? status : 'idle')
+
+  // Hide cover once live drawing has started; restore it after a full idle reset.
+  useEffect(() => {
+    if (session.drawHasStarted || status === 'running' || status === 'paused' || status === 'finished') {
+      setShowWelcomeCover(false)
+    } else if (status === 'idle' && !session.drawHasStarted) {
+      setShowWelcomeCover(true)
+    }
+  }, [session.drawHasStarted, status])
 
   // Crash recovery: durable audits ahead of localStorage (operator/combined only).
   useEffect(() => {
@@ -252,8 +285,15 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
     !license.licensed && !liveEvent && !canOpenInReviewMode(license.status)
   const reviewMode = !license.licensed && canOpenInReviewMode(license.status)
 
-  usePublishSession(session, license.status, true)
-  useCommandRunner(session, license.refresh, true, license.licensed)
+  usePublishSession(session, license.status, true, showWelcomeCover)
+  useCommandRunner(
+    session,
+    license.refresh,
+    true,
+    license.licensed,
+    showWelcomeCover,
+    setShowWelcomeCover,
+  )
 
   useEffect(() => {
     if (license.licensed) {
@@ -385,6 +425,13 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
       }
       onOpenOperatorWindow={operatorOnly ? undefined : detachOperatorFromCombined}
       onFocusStage={operatorOnly ? () => void focusStageWindowElectron() : undefined}
+      showWelcomeCover={showWelcomeCover}
+      onToggleWelcomeCover={() => {
+        if (session.drawHasStarted || status === 'running' || status === 'paused' || status === 'finished') {
+          return
+        }
+        setShowWelcomeCover((v) => !v)
+      }}
       licenseBadge={<LicenseBadge status={license.status} />}
       controlsLocked={!license.licensed}
       auditLocked={false}
@@ -531,6 +578,7 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
         onToggleHold={license.licensed ? session.toggleTicketHold : undefined}
         drawHasStarted={session.drawHasStarted}
         preStartHeld={session.preStartHeld}
+        showWelcomeCover={showWelcomeCover}
       />
 
       {!projectionMode && panel}
@@ -756,6 +804,7 @@ function StageMirrorApp() {
           view.eliminated.length > 0
         }
         preStartHeld={view.preStartHeld ?? []}
+        showWelcomeCover={Boolean(view.showWelcomeCover)}
       />
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-end gap-2 px-3 pb-3 sm:px-4">

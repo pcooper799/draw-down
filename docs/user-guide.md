@@ -61,6 +61,12 @@ If a hold is blocked, the operator notice explains why.
 - **Projector Safety**: pick monitor, check resolution/fullscreen, **Move to Projector**.
 - Stage shows the board, recent draws, last drawn, and prize-stop celebration — not operator continue controls.
 
+## Welcome cover (setup)
+
+- Before **Start**, the stage can show a **Cover**: “Welcome to {org}”, **Draw Down**, and the four **color meanings** (Insured / No-Insurance / Held / Out).
+- Use this while you finish insurance, holds, and projector setup so the audience does not see an unfinished board.
+- Operator **Cover** / **Board** toggles the welcome cover vs the live ticket grid. Cover hides automatically when you Start.
+
 ## Ticket size
 
 - Scale board numbers about **70–240%** (operator slider, on-stage ±, or `+` / `−` keys).

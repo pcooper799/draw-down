@@ -1,6 +1,7 @@
 import { CenterDrawFlash } from '@/components/CenterDrawFlash'
 import { RecentDrawsStrip } from '@/components/RecentDrawsStrip'
 import { StageStopCelebration } from '@/components/StageStopCelebration'
+import { StageWelcomeCover } from '@/components/StageWelcomeCover'
 import { TicketBoard } from '@/components/TicketBoard'
 import { formatTicket } from '@/lib/utils'
 import type { DrawEvent, DrawStatus, Ticket } from '@/types'
@@ -23,6 +24,8 @@ type StageDisplayProps = {
   onToggleHold?: (ticket: number) => void
   drawHasStarted?: boolean
   preStartHeld?: number[]
+  /** Audience welcome / color-legend cover while setting up (before Start). */
+  showWelcomeCover?: boolean
 }
 
 export function StageDisplay({
@@ -43,6 +46,7 @@ export function StageDisplay({
   onToggleHold,
   drawHasStarted = false,
   preStartHeld = [],
+  showWelcomeCover = false,
 }: StageDisplayProps) {
   const outcome = lastDrawn?.outcome
   const isReturned = outcome === 'returned'
@@ -51,6 +55,13 @@ export function StageDisplay({
 
   return (
     <section className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      {showWelcomeCover && (
+        <StageWelcomeCover
+          orgName={orgName}
+          brandImageDataUrl={brandImageDataUrl}
+          totalTickets={totalTickets}
+        />
+      )}
       <div className="absolute inset-0">
         {brandImageDataUrl ? (
           <>

@@ -25,6 +25,8 @@ export type BridgeViewState = {
   license: LicenseStatus
   saveNotice: string | null
   lastSavedAt: string | null
+  /** Audience welcome cover (org + color meanings) while setting up. */
+  showWelcomeCover?: boolean
 }
 
 export type BridgeCommand =
@@ -44,6 +46,7 @@ export type BridgeCommand =
   | { type: 'requestState' }
   | { type: 'focusStage' }
   | { type: 'showOperator' }
+  | { type: 'setWelcomeCover'; visible: boolean }
 
 type BridgeEnvelope =
   | { kind: 'state'; state: BridgeViewState }
