@@ -1,4 +1,13 @@
-import { app, BrowserWindow, ipcMain, Menu, screen, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  powerMonitor,
+  powerSaveBlocker,
+  screen,
+  shell,
+} from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
@@ -33,8 +42,33 @@ if (!app.requestSingleInstanceLock()) {
 
 let stageWin: BrowserWindow | null = null
 let operatorWin: BrowserWindow | null = null
+/** Active while a live draw is running — keeps the display from sleeping. */
+let drawPowerBlockerId: number | null = null
 const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
+
+function setDrawPowerSaveBlocker(active: boolean) {
+  if (active) {
+    if (drawPowerBlockerId != null && powerSaveBlocker.isStarted(drawPowerBlockerId)) {
+      return { ok: true as const, active: true, id: drawPowerBlockerId }
+    }
+    drawPowerBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+    return { ok: true as const, active: true, id: drawPowerBlockerId }
+  }
+  if (drawPowerBlockerId != null && powerSaveBlocker.isStarted(drawPowerBlockerId)) {
+    powerSaveBlocker.stop(drawPowerBlockerId)
+  }
+  drawPowerBlockerId = null
+  return { ok: true as const, active: false, id: null }
+}
+
+function broadcastPowerEvent(event: 'suspend' | 'resume' | 'lock-screen' | 'unlock-screen') {
+  const message = { kind: 'power' as const, event, at: Date.now() }
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
+    win.webContents.send('draw-down:power', message)
+  }
+}
 
 function resolveAppIcon() {
   const buildIco = path.join(process.env.APP_ROOT!, 'build', 'icon.ico')
@@ -480,11 +514,22 @@ ipcMain.handle('draw-down:audit-archive', async (_event, eventId: string) => {
 ipcMain.on('draw-down:bridge', (event, message) => {
   broadcastBridge(message, event.sender)
 })
+ipcMain.handle('draw-down:set-power-save-blocker', (_event, active: boolean) =>
+  setDrawPowerSaveBlocker(Boolean(active)),
+)
 
 app.whenReady().then(async () => {
   buildAppMenu()
+  powerMonitor.on('suspend', () => broadcastPowerEvent('suspend'))
+  powerMonitor.on('resume', () => broadcastPowerEvent('resume'))
+  powerMonitor.on('lock-screen', () => broadcastPowerEvent('lock-screen'))
+  powerMonitor.on('unlock-screen', () => broadcastPowerEvent('unlock-screen'))
   await createStageWindow()
   await createOperatorWindow()
+})
+
+app.on('will-quit', () => {
+  setDrawPowerSaveBlocker(false)
 })
 
 app.on('window-all-closed', () => {

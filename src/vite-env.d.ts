@@ -77,5 +77,7 @@ interface Window {
     auditArchive?: (eventId: string) => Promise<{ ok: boolean; path?: string; reason?: string }>
     bridgePublish?: (message: unknown) => void
     onBridgeMessage?: (handler: (message: unknown) => void) => () => void
+    setPowerSaveBlocker?: (active: boolean) => Promise<{ ok: boolean; active: boolean }>
+    onPowerEvent?: (handler: (event: string) => void) => () => void
   }
 }

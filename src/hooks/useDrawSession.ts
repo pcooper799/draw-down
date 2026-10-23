@@ -1342,6 +1342,44 @@ export function useDrawSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.paceMs])
 
+  // Keep the display awake while a live draw is running (Electron).
+  useEffect(() => {
+    const role = getWindowRole()
+    if (role === 'stage') return
+    const active = status === 'running'
+    void window.drawDown?.setPowerSaveBlocker?.(active)
+    return () => {
+      void window.drawDown?.setPowerSaveBlocker?.(false)
+    }
+  }, [status])
+
+  // If the PC still sleeps / locks, pause safely — never keep a silent dead timer.
+  useEffect(() => {
+    const role = getWindowRole()
+    if (role === 'stage') return
+
+    const pauseForPower = (reason: string) => {
+      if (statusRef.current !== 'running') return
+      pause(reason)
+      setSaveNotice(`${reason} — press Start to continue (drawn tickets are kept)`)
+    }
+
+    const unsub = window.drawDown?.onPowerEvent?.((event) => {
+      if (event === 'suspend' || event === 'lock-screen') {
+        pauseForPower(event === 'suspend' ? 'Paused — PC went to sleep' : 'Paused — screen locked')
+      } else if (event === 'resume' || event === 'unlock-screen') {
+        // Timers die across sleep; if we somehow still look "running", stop safely.
+        if (statusRef.current === 'running') {
+          pauseForPower('Paused after PC wake')
+        }
+      }
+    })
+
+    return () => {
+      unsub?.()
+    }
+  }, [pause])
+
   useEffect(() => {
     const onVisibility = () => {
       // Skip auto-pause during prize-stop continue lead-in (focus flips are common).

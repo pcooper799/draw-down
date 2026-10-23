@@ -90,6 +90,20 @@ contextBridge.exposeInMainWorld('drawDown', {
       ipcRenderer.removeListener('draw-down:bridge', listener)
     }
   },
+  setPowerSaveBlocker: (active: boolean): Promise<{ ok: boolean; active: boolean }> =>
+    ipcRenderer.invoke('draw-down:set-power-save-blocker', active),
+  onPowerEvent: (handler: (event: string) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      message: { kind?: string; event?: string },
+    ) => {
+      if (message?.kind === 'power' && message.event) handler(message.event)
+    }
+    ipcRenderer.on('draw-down:power', listener)
+    return () => {
+      ipcRenderer.removeListener('draw-down:power', listener)
+    }
+  },
 })
 
 function domReady(condition: DocumentReadyState[] = ['complete', 'interactive']) {
