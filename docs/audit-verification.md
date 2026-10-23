@@ -46,7 +46,7 @@ Checks: hash chain, seed commitment/reveal + replay (when revealed), ticket tran
 
 ## Limits vs brief
 - Max tickets remain **2500** (app default); brief mentioned 1500.
-- Fastest pace remains **0.2s** (not 0.1s).
+- Pace range remains **0.2s–30s** between draws.
 - Auction **price** is not in the UI yet; release records store `auctionPrice: null`.
 
 See also: `/cursor/stores/.../internal/audit-system-plan.md` (agent plan).

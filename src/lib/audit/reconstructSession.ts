@@ -13,6 +13,7 @@ import {
   normalizePrizeTiers,
   normalizeTicketList,
 } from '@/lib/drawRules'
+import { normalizeOrgTheme } from '@/lib/orgTheme'
 import type { SessionSnapshot } from '@/lib/sessionPersist'
 import { SNAPSHOT_VERSION } from '@/lib/sessionPersist'
 import type { DrawEvent, SessionConfig } from '@/types'
@@ -202,6 +203,9 @@ export function reconstructFromDurableBlob(
     ticketScale,
     prizeTiers,
     brandImageDataUrl: brandFromEmbedded ?? null,
+    themeColors: normalizeOrgTheme(
+      embedded?.config?.themeColors ?? uiHints?.themeColors ?? DEFAULT_CONFIG.themeColors,
+    ),
   }
 
   // Never auto-resume: force paused/finished/idle — never 'running'

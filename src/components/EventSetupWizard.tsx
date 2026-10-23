@@ -8,6 +8,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { InsuranceManager } from '@/components/InsuranceManager'
+import { OrgThemeEditor } from '@/components/OrgThemeEditor'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -20,13 +21,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import {
+  MAX_PACE_MS,
   MAX_TICKET_SCALE,
   MAX_TICKETS,
+  MIN_PACE_MS,
   MIN_TICKET_SCALE,
   MIN_TICKETS,
   normalizePrizeTiers,
   TICKET_SCALE_STEP,
 } from '@/lib/drawRules'
+import { normalizeOrgTheme } from '@/lib/orgTheme'
 import type { DrawSession } from '@/hooks/useDrawSession'
 
 const STEPS = [
@@ -113,7 +117,9 @@ export function EventSetupWizard({
   const applyDisplay = () => {
     const seconds = Number.parseFloat(paceDraft)
     const ms = Number.isFinite(seconds)
-      ? Math.round(Math.min(60, Math.max(0.2, seconds)) * 1000)
+      ? Math.round(
+          Math.min(MAX_PACE_MS / 1000, Math.max(MIN_PACE_MS / 1000, seconds)) * 1000,
+        )
       : config.paceMs
     applyConfig({ paceMs: ms })
     setPaceDraft((ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1))
@@ -311,6 +317,11 @@ export function EventSetupWizard({
                   )}
                 </div>
               </div>
+              <OrgThemeEditor
+                value={normalizeOrgTheme(config.themeColors)}
+                disabled={controlsLocked}
+                onChange={(themeColors) => applyConfig({ themeColors })}
+              />
             </div>
           )}
 
@@ -384,11 +395,24 @@ export function EventSetupWizard({
                   disabled={controlsLocked || session.drawHasStarted}
                   onChange={(e) => setPaceDraft(e.target.value)}
                 />
-                {session.drawHasStarted && (
-                  <p className="text-xs text-[var(--ink-faint)]">
-                    Pace is locked after Start — use Reset for a new event to change it.
-                  </p>
-                )}
+                <Slider
+                  value={[Math.min(MAX_PACE_MS, Math.max(MIN_PACE_MS, config.paceMs))]}
+                  min={MIN_PACE_MS}
+                  max={MAX_PACE_MS}
+                  step={100}
+                  disabled={controlsLocked || session.drawHasStarted}
+                  onValueChange={(v) => {
+                    const ms = v[0] ?? config.paceMs
+                    applyConfig({ paceMs: ms })
+                    setPaceDraft((ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1))
+                  }}
+                />
+                <p className="text-xs text-[var(--ink-faint)]">
+                  {(MIN_PACE_MS / 1000).toFixed(1)}–{MAX_PACE_MS / 1000}s between draws
+                  {session.drawHasStarted
+                    ? ' · locked after Start — Reset for a new event to change it'
+                    : ''}
+                </p>
               </div>
             </div>
           )}

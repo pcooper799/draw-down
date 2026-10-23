@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AppWindow, Minus, PanelRightOpen, Plus } from 'lucide-react'
 import { ActivationScreen, LicenseBadge } from '@/components/ActivationScreen'
 import { EventRecoveryDialog } from '@/components/EventRecoveryDialog'
@@ -27,6 +27,11 @@ import {
   type LicenseStatus,
 } from '@/lib/license'
 import {
+  normalizeOrgTheme,
+  themeToCssVars,
+  type OrgThemeColors,
+} from '@/lib/orgTheme'
+import {
   focusStageWindowElectron,
   openOperatorWindowElectron,
   publishBridgeState,
@@ -36,6 +41,10 @@ import {
   type BridgeViewState,
 } from '@/lib/sessionBridge'
 import { getWindowRole, urlForRole, type WindowRole } from '@/lib/windowRole'
+
+function orgThemeStyle(colors: OrgThemeColors | undefined): CSSProperties {
+  return themeToCssVars(normalizeOrgTheme(colors)) as CSSProperties
+}
 
 function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false
@@ -511,7 +520,10 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
 
   if (operatorOnly) {
     return (
-      <div className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--panel)] text-[var(--ink)]">
+      <div
+        className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--panel)] text-[var(--ink)]"
+        style={orgThemeStyle(session.config.themeColors)}
+      >
         {license.isDev && license.status.state !== 'active' && (
           <div className="border-b border-[var(--accent)]/40 bg-black/70 px-3 py-1 text-[0.65rem] text-[var(--accent)]">
             Dev mode · license gate skipped · operator window
@@ -549,7 +561,10 @@ function CombinedOrOperatorApp({ role }: { role: Extract<WindowRole, 'combined' 
   }
 
   return (
-    <div className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--stage)] text-[var(--ink)] lg:flex-row">
+    <div
+      className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--stage)] text-[var(--ink)] lg:flex-row"
+      style={orgThemeStyle(session.config.themeColors)}
+    >
       {license.isDev && license.status.state !== 'active' && (
         <div className="absolute left-3 top-3 z-30 border border-[var(--accent)]/40 bg-black/70 px-2 py-1 text-[0.65rem] text-[var(--accent)]">
           Dev mode · license gate skipped
@@ -775,7 +790,10 @@ function StageMirrorApp() {
   }
 
   return (
-    <div className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--stage)] text-[var(--ink)]">
+    <div
+      className="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--stage)] text-[var(--ink)]"
+      style={orgThemeStyle(view.config.themeColors)}
+    >
       <StageDisplay
         orgName={view.config.orgName}
         brandImageDataUrl={view.config.brandImageDataUrl}

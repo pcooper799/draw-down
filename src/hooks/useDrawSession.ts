@@ -23,6 +23,7 @@ import {
   normalizeTicketList,
   pruneInsuranceMarks,
 } from '@/lib/drawRules'
+import { normalizeOrgTheme } from '@/lib/orgTheme'
 import {
   buildPoolFromSnapshot,
   clearAutosave,
@@ -91,6 +92,7 @@ function hydrateFromSnapshot(snapshot: SessionSnapshot) {
     paceMs: clampPaceMs(snapshot.config.paceMs),
     ticketScale: clampTicketScale(snapshot.config.ticketScale ?? 1),
     prizeTiers: normalizePrizeTiers(snapshot.config.prizeTiers ?? [stopAt], total),
+    themeColors: normalizeOrgTheme(snapshot.config.themeColors ?? DEFAULT_CONFIG.themeColors),
   }
   const eliminated = snapshot.eliminated.filter((n) => n >= 1 && n <= total)
   const heldOut = normalizeTicketList(snapshot.heldOut ?? [], total, eliminated)
@@ -383,6 +385,7 @@ export function useDrawSession() {
           merged.prizeTiers ?? [merged.stopAt],
           merged.totalTickets,
         )
+        merged.themeColors = normalizeOrgTheme(merged.themeColors ?? prev.themeColors)
         if (!merged.orgName?.trim()) merged.orgName = prev.orgName
         configRef.current = merged
         return merged

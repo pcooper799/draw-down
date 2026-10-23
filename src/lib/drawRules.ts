@@ -4,7 +4,8 @@ export const MIN_TICKETS = 1
 export const MAX_TICKETS = 2500
 export const MIN_STOP_AT = 1
 export const MIN_PACE_MS = 200
-export const MAX_PACE_MS = 60_000
+/** Slowest draw pace (30 seconds between pulls). */
+export const MAX_PACE_MS = 30_000
 /** Ticket board cell scale (1 = default density). */
 export const MIN_TICKET_SCALE = 0.7
 export const MAX_TICKET_SCALE = 2.4

@@ -7,6 +7,7 @@ import {
   normalizeTicketList,
   pruneInsuranceMarks,
 } from '@/lib/drawRules'
+import { normalizeOrgTheme } from '@/lib/orgTheme'
 import type { DrawEvent, DrawStatus, SessionConfig, Ticket } from '@/types'
 import { DEFAULT_CONFIG } from '@/types'
 
@@ -111,6 +112,9 @@ export function parseSnapshot(raw: unknown): SessionSnapshot | null {
       typeof data.config.brandImageDataUrl === 'string' || data.config.brandImageDataUrl === null
         ? data.config.brandImageDataUrl
         : null,
+    themeColors: normalizeOrgTheme(
+      (data.config as Partial<SessionConfig>).themeColors ?? DEFAULT_CONFIG.themeColors,
+    ),
   }
 
   const eliminatedRaw = Array.isArray(data.eliminated)

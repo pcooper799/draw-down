@@ -38,13 +38,17 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
+import { OrgThemeEditor } from '@/components/OrgThemeEditor'
 import {
+  MAX_PACE_MS,
   MAX_TICKET_SCALE,
   MAX_TICKETS,
+  MIN_PACE_MS,
   MIN_TICKET_SCALE,
   nudgeTicketScale,
   TICKET_SCALE_STEP,
 } from '@/lib/drawRules'
+import { normalizeOrgTheme } from '@/lib/orgTheme'
 import { formatSavedAt } from '@/lib/sessionPersist'
 import { formatTicket } from '@/lib/utils'
 import type { DrawSession } from '@/hooks/useDrawSession'
@@ -218,7 +222,9 @@ export function OperatorPanel({
       setPaceDraft((config.paceMs / 1000).toFixed(1))
       return
     }
-    const ms = Math.round(Math.min(60, Math.max(0.2, seconds)) * 1000)
+    const ms = Math.round(
+      Math.min(MAX_PACE_MS / 1000, Math.max(MIN_PACE_MS / 1000, seconds)) * 1000,
+    )
     applyConfig({ paceMs: ms })
     setPaceDraft((ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 1))
   }
@@ -426,6 +432,11 @@ export function OperatorPanel({
                     )}
                   </div>
                 </div>
+                <OrgThemeEditor
+                  value={normalizeOrgTheme(config.themeColors)}
+                  disabled={controlsLocked}
+                  onChange={(themeColors) => applyConfig({ themeColors })}
+                />
                 <Button
                   type="button"
                   className="w-full"
@@ -621,15 +632,17 @@ export function OperatorPanel({
             </div>
           </div>
           <Slider
-            value={[config.paceMs]}
-            min={500}
-            max={10000}
+            value={[Math.min(MAX_PACE_MS, Math.max(MIN_PACE_MS, config.paceMs))]}
+            min={MIN_PACE_MS}
+            max={MAX_PACE_MS}
             step={100}
             disabled={controlsLocked || drawHasStarted}
             onValueChange={(v) => applyConfig({ paceMs: v[0] ?? 2500 })}
           />
           <p className="text-xs text-[var(--ink-faint)]">
             {paceSeconds.toFixed(paceSeconds < 10 ? 1 : 0)}s between draws
+            {' · '}
+            {(MIN_PACE_MS / 1000).toFixed(1)}–{MAX_PACE_MS / 1000}s
             {drawHasStarted
               ? ' · locked after Start (Reset to change)'
               : ' · set before you start'}

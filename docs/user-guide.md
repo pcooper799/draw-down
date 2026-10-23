@@ -52,7 +52,14 @@ If a hold is blocked, the operator notice explains why.
 ## Pace lock
 
 - Set seconds between draws **before** the first Start (slider or number).
+- Range: **0.2s–30s** between draws.
 - After Start, pace is locked until a gated **Reset** for a new event.
+
+## Organization colors
+
+- In **Wizard** (Organization step) or **Advanced**, set custom colors for this org: brand accent, Insured, No-Insurance, Held, and Out.
+- Colors apply to the stage board, welcome cover, and operator accent chrome. Saved with the session.
+- **Defaults** restores the standard Draw Down palette.
 
 ## Projection & operator window
 

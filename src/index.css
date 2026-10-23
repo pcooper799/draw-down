@@ -115,15 +115,23 @@
   }
 
   .recent-draws-chip--saved {
-    color: #e8fff1;
-    border-color: rgba(140, 210, 165, 0.55);
-    background: linear-gradient(160deg, rgba(90, 168, 122, 0.55), rgba(54, 120, 84, 0.4));
+    color: var(--ticket-insured-ink, #e8fff1);
+    border-color: color-mix(in srgb, var(--safe) 55%, white);
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--safe) 55%, transparent),
+      color-mix(in srgb, var(--safe) 35%, #000)
+    );
   }
 
   .recent-draws-chip--out {
-    color: rgba(243, 230, 200, 0.88);
-    border-color: rgba(211, 90, 74, 0.55);
-    background: linear-gradient(160deg, rgba(180, 70, 58, 0.55), rgba(120, 40, 34, 0.4));
+    color: color-mix(in srgb, var(--ticket-out-ink, #f3e6c8) 88%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 55%, white);
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--danger) 55%, transparent),
+      color-mix(in srgb, var(--danger) 35%, #000)
+    );
     text-decoration: line-through;
     text-decoration-thickness: 1px;
   }
@@ -409,28 +417,44 @@
   }
 
   .ticket-cell--insured {
-    color: #e8fff1;
-    background: linear-gradient(160deg, rgba(90, 168, 122, 0.72), rgba(54, 120, 84, 0.55));
-    border-color: rgba(140, 210, 165, 0.55);
+    color: var(--ticket-insured-ink, #e8fff1);
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--safe) 78%, transparent),
+      color-mix(in srgb, var(--safe) 42%, #000)
+    );
+    border-color: color-mix(in srgb, var(--safe) 60%, white);
   }
 
   .ticket-cell--active {
-    color: #241c06;
-    background: linear-gradient(160deg, rgba(240, 210, 110, 0.95), rgba(228, 168, 56, 0.88));
-    border-color: rgba(255, 214, 120, 0.65);
+    color: var(--ticket-open-ink, #241c06);
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--warn) 96%, white),
+      color-mix(in srgb, var(--warn) 82%, var(--accent))
+    );
+    border-color: color-mix(in srgb, var(--warn) 70%, white);
   }
 
   .ticket-cell--held {
-    color: #e8fbfc;
-    background: linear-gradient(160deg, rgba(70, 140, 148, 0.75), rgba(36, 88, 96, 0.6));
-    border-color: rgba(110, 195, 201, 0.65);
+    color: var(--ticket-held-ink, #e8fbfc);
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--held) 78%, transparent),
+      color-mix(in srgb, var(--held) 40%, #000)
+    );
+    border-color: color-mix(in srgb, var(--held) 65%, white);
     border-style: dashed;
   }
 
   .ticket-cell--out {
-    color: rgba(243, 230, 200, 0.5);
-    background: linear-gradient(160deg, rgba(180, 70, 58, 0.7), rgba(120, 40, 34, 0.55));
-    border-color: rgba(211, 90, 74, 0.55);
+    color: color-mix(in srgb, var(--ticket-out-ink, #f3e6c8) 55%, transparent);
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--danger) 72%, transparent),
+      color-mix(in srgb, var(--danger) 42%, #000)
+    );
+    border-color: color-mix(in srgb, var(--danger) 55%, white);
     text-decoration: line-through;
     text-decoration-thickness: 1px;
   }
@@ -455,20 +479,20 @@
   }
 
   .legend-swatch--insured {
-    background: rgba(90, 168, 122, 0.85);
+    background: color-mix(in srgb, var(--safe) 88%, transparent);
   }
 
   .legend-swatch--active {
-    background: rgba(228, 193, 90, 0.95);
+    background: color-mix(in srgb, var(--warn) 95%, transparent);
   }
 
   .legend-swatch--held {
-    background: rgba(110, 195, 201, 0.9);
+    background: color-mix(in srgb, var(--held) 90%, transparent);
     border-style: dashed;
   }
 
   .legend-swatch--out {
-    background: rgba(211, 90, 74, 0.85);
+    background: color-mix(in srgb, var(--danger) 88%, transparent);
   }
 
   .activation-screen {

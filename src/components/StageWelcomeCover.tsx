@@ -10,28 +10,28 @@ const COLOR_MEANINGS = [
     label: 'Insured',
     meaning: 'Still in — one free return',
     swatch: 'var(--safe)',
-    ink: '#e8fff1',
+    ink: 'var(--ticket-insured-ink, #e8fff1)',
   },
   {
     key: 'open',
     label: 'No-Insurance',
     meaning: 'Still in the draw',
     swatch: 'var(--warn)',
-    ink: '#1a1206',
+    ink: 'var(--ticket-open-ink, #1a1206)',
   },
   {
     key: 'held',
     label: 'Held',
     meaning: 'Out for auction — not drawn',
     swatch: 'var(--held)',
-    ink: '#062022',
+    ink: 'var(--ticket-held-ink, #e8fbfc)',
   },
   {
     key: 'out',
     label: 'Out',
     meaning: 'Eliminated from the board',
     swatch: 'var(--danger)',
-    ink: '#fff5f3',
+    ink: 'var(--ticket-out-ink, #fff5f3)',
   },
 ] as const
 

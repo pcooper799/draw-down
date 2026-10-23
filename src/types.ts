@@ -1,3 +1,5 @@
+import { DEFAULT_ORG_THEME, type OrgThemeColors } from '@/lib/orgTheme'
+
 export type DrawStatus = 'idle' | 'running' | 'paused' | 'finished'
 
 export type Ticket = {
@@ -13,6 +15,8 @@ export type DrawEvent = {
   at: number
 }
 
+export type { OrgThemeColors }
+
 export type SessionConfig = {
   totalTickets: number
   stopAt: number
@@ -26,6 +30,8 @@ export type SessionConfig = {
   prizeTiers: number[]
   orgName: string
   brandImageDataUrl: string | null
+  /** Per-org stage colors (accent + ticket states). */
+  themeColors: OrgThemeColors
 }
 
 export const DEFAULT_CONFIG: SessionConfig = {
@@ -36,4 +42,5 @@ export const DEFAULT_CONFIG: SessionConfig = {
   prizeTiers: [1],
   orgName: 'Your Organization',
   brandImageDataUrl: null,
+  themeColors: { ...DEFAULT_ORG_THEME },
 }
