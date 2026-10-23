@@ -546,6 +546,7 @@ export function useDrawSession() {
       setPreStartHeld([])
       setHistory([])
       setLastDrawn(null)
+      setFlashKey(0)
       setStatus('idle')
       setInsuranceMarks(pruned)
 

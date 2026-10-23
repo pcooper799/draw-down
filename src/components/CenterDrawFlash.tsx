@@ -7,8 +7,10 @@ const FLASH_MS = 1600
 /**
  * Full-stage center flash when a ticket is drawn.
  * Distinct motion for eliminated vs insurance-saved returns.
- * Triggered only by flashKey (a real draw) — never by lastDrawn identity churn
- * while paused / emergency-stopped / idle.
+ *
+ * Triggered by flashKey (increments on each real draw). If the operator window
+ * restarts and flashKey goes back to 0 while the stage stays open, we reset the
+ * seen-key guard so new draws flash again.
  */
 export function CenterDrawFlash({
   lastDrawn,
@@ -19,32 +21,38 @@ export function CenterDrawFlash({
   flashKey: number
   digits: number
 }) {
-  const [visible, setVisible] = useState(false)
   const [event, setEvent] = useState<DrawEvent | null>(null)
-  const lastDrawnRef = useRef(lastDrawn)
-  lastDrawnRef.current = lastDrawn
+  const [animKey, setAnimKey] = useState(0)
   const seenKeyRef = useRef(0)
 
   useEffect(() => {
-    if (flashKey === 0) return
-    // Ignore duplicate / stale keys (bridge republish, remount with same key).
+    // Operator remount / new session often restarts flashKey at 0 while the
+    // stage window keeps a high seen-key from the previous run.
+    if (flashKey < seenKeyRef.current) {
+      seenKeyRef.current = 0
+    }
+    if (flashKey <= 0) return
     if (flashKey <= seenKeyRef.current) return
-    const drawn = lastDrawnRef.current
-    if (!drawn) return
+    if (!lastDrawn) return
 
     seenKeyRef.current = flashKey
-    setEvent(drawn)
-    setVisible(true)
-    const id = window.setTimeout(() => setVisible(false), FLASH_MS)
-    return () => window.clearTimeout(id)
-  }, [flashKey])
+    setEvent(lastDrawn)
+    setAnimKey(flashKey)
+  }, [flashKey, lastDrawn])
 
-  if (!visible || !event) return null
+  useEffect(() => {
+    if (!event) return
+    const id = window.setTimeout(() => setEvent(null), FLASH_MS)
+    return () => window.clearTimeout(id)
+  }, [event, animKey])
+
+  if (!event) return null
 
   const saved = event.outcome === 'returned'
 
   return (
     <div
+      key={animKey}
       className={`center-draw-flash center-draw-flash--${saved ? 'saved' : 'out'}`}
       role="status"
       aria-live="assertive"
