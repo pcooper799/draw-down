@@ -34,6 +34,7 @@ import {
   writeAutosave,
   type SessionSnapshot,
 } from '@/lib/sessionPersist'
+import { getWindowRole } from '@/lib/windowRole'
 import {
   DEFAULT_CONFIG,
   type DrawEvent,
@@ -1344,13 +1345,17 @@ export function useDrawSession() {
     const onVisibility = () => {
       // Skip auto-pause during prize-stop continue lead-in (focus flips are common).
       if (
-        document.hidden &&
-        statusRef.current === 'running' &&
-        !leadInActiveRef.current
+        !document.hidden ||
+        statusRef.current !== 'running' ||
+        leadInActiveRef.current
       ) {
-        pause()
-        setSaveNotice('Paused — window was hidden (safe for the draw)')
+        return
       }
+      // Operator window is often minimized while the stage keeps projecting —
+      // the live clock lives here, so hiding controls must not stop the draw.
+      if (getWindowRole() === 'operator') return
+      pause()
+      setSaveNotice('Paused — window was hidden (safe for the draw)')
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)

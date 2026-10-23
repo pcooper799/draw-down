@@ -65,6 +65,7 @@ If a hold is blocked, the operator notice explains why.
 
 - **Project** (`P`): hide docked controls for a clean audience view. `Esc` / `P` restores controls.
 - **Pop out** / operator window: controls stay on a separate always-on-top window; stage stays clear.
+- You can **minimize the operator window** while a draw is running — the stage keeps drawing at the set pace (use Emergency Stop or restore the operator window to pause).
 - **Projector Safety**: pick monitor, check resolution/fullscreen, **Move to Projector**.
 - Stage shows the board, recent draws, last drawn, and prize-stop celebration — not operator continue controls.
 

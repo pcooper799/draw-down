@@ -144,6 +144,8 @@ async function createStageWindow() {
       preload,
       contextIsolation: true,
       nodeIntegration: false,
+      // Stage may stay full-screen while operator is minimized; keep UI responsive.
+      backgroundThrottling: false,
     },
   })
 
@@ -186,6 +188,9 @@ async function createOperatorWindow() {
       preload,
       contextIsolation: true,
       nodeIntegration: false,
+      // Draw timer runs in this window — must keep firing when minimized
+      // so the stage projection continues at the set pace.
+      backgroundThrottling: false,
     },
   })
 
